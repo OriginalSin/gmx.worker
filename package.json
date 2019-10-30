@@ -1,0 +1,15 @@
+{
+  "name": "gmx-worker",
+  "version": "1.0.0",
+  "description": "GMX Worker",
+  "main": "index.js",
+  "scripts": {
+    "build": "rollup -c",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Serg Alekseev",
+  "license": "ISC",
+  "dependencies": {
+    "rollup": "^1.26.0"
+  }
+}
