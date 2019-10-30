@@ -81,4 +81,53 @@ const Utils = {
 
 };
 
+L.Map.addInitHook(function () {
+	let map = this;
+	map
+		.on('layeradd', (ev) => {
+	console.log('layeradd', ev);
+			let it = ev.layer,
+				_gmx = it._gmx;
+
+			return new Promise((resolve) => {
+				if (_gmx) {
+					dataWorker.onmessage = (res) => {
+						let data = res.data,
+							cmd = data.cmd,
+							json = data.out;
+
+						if (cmd === 'addDataSource') {
+							resolve(json);
+						}
+					};
+					dataWorker.postMessage({cmd: 'addDataSource', id: _gmx.layerID, hostName: _gmx.hostName});
+				} else {
+					resolve({error: 'Not Geomixer layer'});
+				}
+			});
+		})
+		.on('layerremove', (ev) => {
+	console.log('layerremove', ev);
+			let it = ev.layer,
+				_gmx = it._gmx;
+
+			return new Promise((resolve) => {
+				if (_gmx) {
+					dataWorker.onmessage = (res) => {
+						let data = res.data,
+							cmd = data.cmd,
+							json = data.out;
+
+						if (cmd === 'removeDataSource') {
+							resolve(json);
+						}
+					};
+					dataWorker.postMessage({cmd: 'removeDataSource', id: _gmx.layerID, hostName: _gmx.hostName});
+				} else {
+					resolve({error: 'Not Geomixer layer'});
+				}
+			});
+		});
+});
+
 export {dataWorker, Utils};

@@ -20,8 +20,14 @@ var _self = self;
 				_self.postMessage(message);
 			});
 			break;
-		case 'getReportsCount':
-			Requests.getReportsCount().then((json) => {
+		case 'addDataSource':
+			Requests.addDataSource({id: message.layerID, hostName: message.hostName}).then((json) => {
+				message.out = json;
+				_self.postMessage(message);
+			});
+			break;
+		case 'removeDataSource':
+			Requests.removeDataSource({id: message.layerID, hostName: message.hostName}).then((json) => {
 				message.out = json;
 				_self.postMessage(message);
 			});

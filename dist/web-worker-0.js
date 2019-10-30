@@ -403,8 +403,22 @@ var _self$1 = self;
       });
       break;
 
-    case 'getReportsCount':
-      Requests.getReportsCount().then(function (json) {
+    case 'addDataSource':
+      Requests.addDataSource({
+        id: message.layerID,
+        hostName: message.hostName
+      }).then(function (json) {
+        message.out = json;
+
+        _self$1.postMessage(message);
+      });
+      break;
+
+    case 'removeDataSource':
+      Requests.removeDataSource({
+        id: message.layerID,
+        hostName: message.hostName
+      }).then(function (json) {
         message.out = json;
 
         _self$1.postMessage(message);

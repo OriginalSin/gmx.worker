@@ -476,6 +476,64 @@ var gmxWorker = (function (exports) {
         });
       }
     };
+    L.Map.addInitHook(function () {
+      var map = this;
+      map.on('layeradd', function (ev) {
+        console.log('layeradd', ev);
+        var it = ev.layer,
+            _gmx = it._gmx;
+        return new Promise(function (resolve) {
+          if (_gmx) {
+            dataWorker.onmessage = function (res) {
+              var data = res.data,
+                  cmd = data.cmd,
+                  json = data.out;
+
+              if (cmd === 'addDataSource') {
+                resolve(json);
+              }
+            };
+
+            dataWorker.postMessage({
+              cmd: 'addDataSource',
+              id: _gmx.layerID,
+              hostName: _gmx.hostName
+            });
+          } else {
+            resolve({
+              error: 'Not Geomixer layer'
+            });
+          }
+        });
+      }).on('layerremove', function (ev) {
+        console.log('layerremove', ev);
+        var it = ev.layer,
+            _gmx = it._gmx;
+        return new Promise(function (resolve) {
+          if (_gmx) {
+            dataWorker.onmessage = function (res) {
+              var data = res.data,
+                  cmd = data.cmd,
+                  json = data.out;
+
+              if (cmd === 'removeDataSource') {
+                resolve(json);
+              }
+            };
+
+            dataWorker.postMessage({
+              cmd: 'removeDataSource',
+              id: _gmx.layerID,
+              hostName: _gmx.hostName
+            });
+          } else {
+            resolve({
+              error: 'Not Geomixer layer'
+            });
+          }
+        });
+      });
+    });
 
     exports.Utils = Utils;
     exports.dataWorker = dataWorker;
