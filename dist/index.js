@@ -19,30 +19,49 @@ var gmxWorker = (function (exports) {
     }
 
     /* eslint-disable */
-    const WorkerFactory = createURLWorkerFactory('geomixer/external/gmx.worker/dist/web-worker-0.js');
+    var WorkerFactory = createURLWorkerFactory('geomixer/external/gmx.worker/dist/web-worker-0.js');
     /* eslint-enable */
 
-    const _self = self || window,
-          serverBase = _self.serverBase || '//maps.kosmosnimki.ru/',
-          serverProxy = serverBase + 'Plugins/ForestReport/proxy';
+    var _self = self || window,
+        serverBase = _self.serverBase || '//maps.kosmosnimki.ru/',
+        serverProxy = serverBase + 'Plugins/ForestReport/proxy';
 
-    const parseURLParams = str => {
-      let sp = new URLSearchParams(str || location.search),
+    var parseURLParams = function parseURLParams(str) {
+      var sp = new URLSearchParams(str || location.search),
           out = {},
           arr = [];
+      var _iteratorNormalCompletion = true;
+      var _didIteratorError = false;
+      var _iteratorError = undefined;
 
-      for (let p of sp) {
-        let k = p[0],
-            z = p[1];
+      try {
+        for (var _iterator = sp[Symbol.iterator](), _step; !(_iteratorNormalCompletion = (_step = _iterator.next()).done); _iteratorNormalCompletion = true) {
+          var p = _step.value;
+          var k = p[0],
+              z = p[1];
 
-        if (z) {
-          if (!out[k]) {
-            out[k] = [];
+          if (z) {
+            if (!out[k]) {
+              out[k] = [];
+            }
+
+            out[k].push(z);
+          } else {
+            arr.push(k);
           }
-
-          out[k].push(z);
-        } else {
-          arr.push(k);
+        }
+      } catch (err) {
+        _didIteratorError = true;
+        _iteratorError = err;
+      } finally {
+        try {
+          if (!_iteratorNormalCompletion && _iterator.return != null) {
+            _iterator.return();
+          }
+        } finally {
+          if (_didIteratorError) {
+            throw _iteratorError;
+          }
         }
       }
 
@@ -52,10 +71,10 @@ var gmxWorker = (function (exports) {
       };
     };
 
-    const getMapTree = params => {
+    var getMapTree = function getMapTree(params) {
       params = params || {};
       console.log('parseURLParams', parseURLParams(params.search));
-      let url = `${serverBase}Map/GetMapFolder`;
+      var url = "".concat(serverBase, "Map/GetMapFolder");
       url += '?mapId=' + (params.mapId || 'C8612B3A77D84F3F87953BEF17026A5F');
       url += '&folderId=root';
       url += '&srs=3857';
@@ -67,26 +86,28 @@ var gmxWorker = (function (exports) {
         credentials: 'include' // headers: {'Accept': 'application/json'},
         // body: JSON.stringify(params)	// TODO: сервер почему то не хочет работать так https://googlechrome.github.io/samples/fetch-api/fetch-post.html
 
-      }).then(res => {
+      }).then(function (res) {
         return res.json();
-      }).then(json => {
+      }).then(function (json) {
         return parseTree(json);
-      }).catch(err => console.warn(err));
+      }).catch(function (err) {
+        return console.warn(err);
+      });
     };
 
-    const _iterateNodeChilds = (node, level, out) => {
+    var _iterateNodeChilds = function _iterateNodeChilds(node, level, out) {
       level = level || 0;
       out = out || {
         layers: []
       };
 
       if (node) {
-        let type = node.type,
+        var type = node.type,
             content = node.content,
             props = content.properties;
 
         if (type === 'layer') {
-          let ph = {
+          var ph = {
             level: level,
             properties: props
           };
@@ -97,14 +118,14 @@ var gmxWorker = (function (exports) {
 
           out.layers.push(ph);
         } else if (type === 'group') {
-          let childs = content.children || [];
+          var childs = content.children || [];
           out.layers.push({
             level: level,
             group: true,
             childsLen: childs.length,
             properties: props
           });
-          childs.map(it => {
+          childs.map(function (it) {
             _iterateNodeChilds(it, level + 1, out);
           });
         }
@@ -115,8 +136,8 @@ var gmxWorker = (function (exports) {
       return out;
     };
 
-    const parseTree = json => {
-      let out = {};
+    var parseTree = function parseTree(json) {
+      var out = {};
 
       if (json.Status === 'error') {
         out = json;
@@ -129,19 +150,23 @@ var gmxWorker = (function (exports) {
       return out;
     };
 
-    const getReq = url => {
+    var getReq = function getReq(url) {
       return fetch(url, {
         method: 'get',
         mode: 'cors',
         credentials: 'include' // headers: {'Accept': 'application/json'},
         // body: JSON.stringify(params)	// TODO: сервер почему то не хочет работать так https://googlechrome.github.io/samples/fetch-api/fetch-post.html
 
-      }).then(res => res.json()).catch(err => console.warn(err));
+      }).then(function (res) {
+        return res.json();
+      }).catch(function (err) {
+        return console.warn(err);
+      });
     };
 
-    const getLayerItems = params => {
+    var getLayerItems = function getLayerItems(params) {
       params = params || {};
-      let url = `${serverBase}VectorLayer/Search.ashx`;
+      var url = "".concat(serverBase, "VectorLayer/Search.ashx");
       url += '?layer=' + params.layerID;
 
       if (params.id) {
@@ -153,51 +178,51 @@ var gmxWorker = (function (exports) {
       return getReq(url);
     };
 
-    const getReportsCount = () => {
+    var getReportsCount = function getReportsCount() {
       return getReq(serverProxy + '?path=/rest/v1/get-current-user-info');
     };
 
     var Requests = {
-      parseURLParams,
-      getMapTree,
-      getReportsCount,
-      getLayerItems
+      parseURLParams: parseURLParams,
+      getMapTree: getMapTree,
+      getReportsCount: getReportsCount,
+      getLayerItems: getLayerItems
     };
 
-    const dataWorker = new WorkerFactory(); //dataWorker.postMessage('Hello World!');
+    var dataWorker = new WorkerFactory(); //dataWorker.postMessage('Hello World!');
 
-    const Utils = {
-      saveState: (data, key) => {
+    var Utils = {
+      saveState: function saveState(data, key) {
         key = key || 'Forest_';
         window.localStorage.setItem(key, JSON.stringify(data));
       },
-      getState: key => {
+      getState: function getState(key) {
         key = key || 'Forest_';
         return JSON.parse(window.localStorage.getItem(key)) || {};
       },
-      isDelynkaLayer: it => {
-        let out = false;
+      isDelynkaLayer: function isDelynkaLayer(it) {
+        var out = false;
 
         if (it._gmx) {
-          let attr = it._gmx.tileAttributeTypes;
+          var attr = it._gmx.tileAttributeTypes;
           out = attr.snap && attr.FRSTAT;
         }
 
         return out;
       },
-      isKvartalLayer: it => {
-        let out = false;
+      isKvartalLayer: function isKvartalLayer(it) {
+        var out = false;
 
         if (it._gmx) {
-          let attr = it._gmx.tileAttributeTypes;
+          var attr = it._gmx.tileAttributeTypes;
           out = attr.kv;
         }
 
         return out;
       },
-      getLayerItems: (it, opt) => {
-        dataWorker.onmessage = res => {
-          let data = res.data,
+      getLayerItems: function getLayerItems(it, opt) {
+        dataWorker.onmessage = function (res) {
+          var data = res.data,
               cmd = data.cmd,
               json = data.out,
               type = opt && opt.type || 'delynka';
@@ -218,9 +243,9 @@ var gmxWorker = (function (exports) {
           opt: opt
         });
       },
-      getReportsCount: opt => {
-        dataWorker.onmessage = res => {
-          let data = res.data,
+      getReportsCount: function getReportsCount(opt) {
+        dataWorker.onmessage = function (res) {
+          var data = res.data,
               cmd = data.cmd,
               json = data.out;
 
@@ -234,10 +259,10 @@ var gmxWorker = (function (exports) {
           opt: opt
         });
       },
-      getMap: opt => {
-        return new Promise((resolve, reject) => {
-          dataWorker.onmessage = res => {
-            let data = res.data,
+      getMap: function getMap(opt) {
+        return new Promise(function (resolve, reject) {
+          dataWorker.onmessage = function (res) {
+            var data = res.data,
                 cmd = data.cmd,
                 json = data.out;
 
@@ -247,7 +272,7 @@ var gmxWorker = (function (exports) {
 
           };
 
-          let pars = Requests.parseURLParams(location.search);
+          var pars = Requests.parseURLParams(location.search);
           dataWorker.postMessage({
             cmd: 'getMap',
             mapID: pars.main.length ? pars.main[0] : mapID,

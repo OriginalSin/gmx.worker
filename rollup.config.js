@@ -8,26 +8,26 @@ import pkg from './package.json';
 import webWorkerLoader from './scripts/index.js';
 
 export default {
-    input: 'src/index.js',
-	output: {
-		file: pkg.main,
-		format: 'iife',
-		sourcemap: true,
-		name: 'gmxWorker'
-	},
+	input: 'src/index.js',
+		output: {
+			file: pkg.main,
+			format: 'iife',
+			sourcemap: true,
+			name: 'gmxWorker'
+		},
 
-    plugins: [ 
-        webWorkerLoader({
-			inline: false,		// should the worker code be inlined (Base64). Default: true
-			loadPath: 'geomixer/external/gmx.worker/dist'	// this options is useful when the worker scripts need to be loaded from another folder.
-		}),
-		resolve(),
-		commonjs(),
-		json(),
-		eslint(),
-		babel({
-			include: ['src/**'],
-			exclude: 'node_modules/**'
-		})
-    ]
+		plugins: [ 
+			webWorkerLoader({
+				inline: false,		// should the worker code be inlined (Base64). Default: true
+				loadPath: 'geomixer/external/gmx.worker/dist'	// this options is useful when the worker scripts need to be loaded from another folder.
+			}),
+			resolve(),
+			commonjs(),
+			json(),
+			eslint(),
+			babel({
+				include: ['src/**'],
+				exclude: 'node_modules/**'
+			})
+		]
 };

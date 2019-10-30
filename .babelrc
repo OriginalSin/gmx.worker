@@ -4,7 +4,11 @@
       "@babel/env", {
         "modules": false,
         "targets": {
-          "browsers": ["last 2 Chrome versions"]
+          "browsers": [
+            "last 1 version",
+            "> 1%",
+            "IE 10"
+          ]
         }
       }
     ]

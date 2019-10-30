@@ -1,24 +1,43 @@
-const _self = self || window,
-      serverBase = _self.serverBase || '//maps.kosmosnimki.ru/',
-      serverProxy = serverBase + 'Plugins/ForestReport/proxy';
+var _self = self || window,
+    serverBase = _self.serverBase || '//maps.kosmosnimki.ru/',
+    serverProxy = serverBase + 'Plugins/ForestReport/proxy';
 
-const parseURLParams = str => {
-  let sp = new URLSearchParams(str || location.search),
+var parseURLParams = function parseURLParams(str) {
+  var sp = new URLSearchParams(str || location.search),
       out = {},
       arr = [];
+  var _iteratorNormalCompletion = true;
+  var _didIteratorError = false;
+  var _iteratorError = undefined;
 
-  for (let p of sp) {
-    let k = p[0],
-        z = p[1];
+  try {
+    for (var _iterator = sp[Symbol.iterator](), _step; !(_iteratorNormalCompletion = (_step = _iterator.next()).done); _iteratorNormalCompletion = true) {
+      var p = _step.value;
+      var k = p[0],
+          z = p[1];
 
-    if (z) {
-      if (!out[k]) {
-        out[k] = [];
+      if (z) {
+        if (!out[k]) {
+          out[k] = [];
+        }
+
+        out[k].push(z);
+      } else {
+        arr.push(k);
       }
-
-      out[k].push(z);
-    } else {
-      arr.push(k);
+    }
+  } catch (err) {
+    _didIteratorError = true;
+    _iteratorError = err;
+  } finally {
+    try {
+      if (!_iteratorNormalCompletion && _iterator.return != null) {
+        _iterator.return();
+      }
+    } finally {
+      if (_didIteratorError) {
+        throw _iteratorError;
+      }
     }
   }
 
@@ -28,10 +47,10 @@ const parseURLParams = str => {
   };
 };
 
-const getMapTree = params => {
+var getMapTree = function getMapTree(params) {
   params = params || {};
   console.log('parseURLParams', parseURLParams(params.search));
-  let url = `${serverBase}Map/GetMapFolder`;
+  var url = "".concat(serverBase, "Map/GetMapFolder");
   url += '?mapId=' + (params.mapId || 'C8612B3A77D84F3F87953BEF17026A5F');
   url += '&folderId=root';
   url += '&srs=3857';
@@ -43,26 +62,28 @@ const getMapTree = params => {
     credentials: 'include' // headers: {'Accept': 'application/json'},
     // body: JSON.stringify(params)	// TODO: сервер почему то не хочет работать так https://googlechrome.github.io/samples/fetch-api/fetch-post.html
 
-  }).then(res => {
+  }).then(function (res) {
     return res.json();
-  }).then(json => {
+  }).then(function (json) {
     return parseTree(json);
-  }).catch(err => console.warn(err));
+  }).catch(function (err) {
+    return console.warn(err);
+  });
 };
 
-const _iterateNodeChilds = (node, level, out) => {
+var _iterateNodeChilds = function _iterateNodeChilds(node, level, out) {
   level = level || 0;
   out = out || {
     layers: []
   };
 
   if (node) {
-    let type = node.type,
+    var type = node.type,
         content = node.content,
         props = content.properties;
 
     if (type === 'layer') {
-      let ph = {
+      var ph = {
         level: level,
         properties: props
       };
@@ -73,14 +94,14 @@ const _iterateNodeChilds = (node, level, out) => {
 
       out.layers.push(ph);
     } else if (type === 'group') {
-      let childs = content.children || [];
+      var childs = content.children || [];
       out.layers.push({
         level: level,
         group: true,
         childsLen: childs.length,
         properties: props
       });
-      childs.map(it => {
+      childs.map(function (it) {
         _iterateNodeChilds(it, level + 1, out);
       });
     }
@@ -91,8 +112,8 @@ const _iterateNodeChilds = (node, level, out) => {
   return out;
 };
 
-const parseTree = json => {
-  let out = {};
+var parseTree = function parseTree(json) {
+  var out = {};
 
   if (json.Status === 'error') {
     out = json;
@@ -105,19 +126,23 @@ const parseTree = json => {
   return out;
 };
 
-const getReq = url => {
+var getReq = function getReq(url) {
   return fetch(url, {
     method: 'get',
     mode: 'cors',
     credentials: 'include' // headers: {'Accept': 'application/json'},
     // body: JSON.stringify(params)	// TODO: сервер почему то не хочет работать так https://googlechrome.github.io/samples/fetch-api/fetch-post.html
 
-  }).then(res => res.json()).catch(err => console.warn(err));
+  }).then(function (res) {
+    return res.json();
+  }).catch(function (err) {
+    return console.warn(err);
+  });
 };
 
-const getLayerItems = params => {
+var getLayerItems = function getLayerItems(params) {
   params = params || {};
-  let url = `${serverBase}VectorLayer/Search.ashx`;
+  var url = "".concat(serverBase, "VectorLayer/Search.ashx");
   url += '?layer=' + params.layerID;
 
   if (params.id) {
@@ -129,31 +154,31 @@ const getLayerItems = params => {
   return getReq(url);
 };
 
-const getReportsCount = () => {
+var getReportsCount = function getReportsCount() {
   return getReq(serverProxy + '?path=/rest/v1/get-current-user-info');
 };
 
 var Requests = {
-  parseURLParams,
-  getMapTree,
-  getReportsCount,
-  getLayerItems
+  parseURLParams: parseURLParams,
+  getMapTree: getMapTree,
+  getReportsCount: getReportsCount,
+  getLayerItems: getLayerItems
 };
 
 var _self$1 = self;
 
-(_self$1.on || _self$1.addEventListener).call(_self$1, 'message', e => {
-  const message = e.data || e;
+(_self$1.on || _self$1.addEventListener).call(_self$1, 'message', function (e) {
+  var message = e.data || e;
   console.log('message ', e);
 
   switch (message.cmd) {
     case 'getLayerItems':
       Requests.getLayerItems({
         layerID: message.layerID
-      }).then(json => {
+      }).then(function (json) {
         message.out = json;
-        let pt = {};
-        json.Result.fields.forEach((name, i) => {
+        var pt = {};
+        json.Result.fields.forEach(function (name, i) {
           pt[name] = i;
         });
         json.Result.fieldKeys = pt;
@@ -166,7 +191,7 @@ var _self$1 = self;
       Requests.getMapTree({
         mapId: message.mapID,
         search: message.search
-      }).then(json => {
+      }).then(function (json) {
         message.out = json;
 
         _self$1.postMessage(message);
@@ -174,7 +199,7 @@ var _self$1 = self;
       break;
 
     case 'getReportsCount':
-      Requests.getReportsCount().then(json => {
+      Requests.getReportsCount().then(function (json) {
         message.out = json;
 
         _self$1.postMessage(message);
