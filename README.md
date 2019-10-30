@@ -1,0 +1,2 @@
+# gmx.worker
+Geomixer workers
