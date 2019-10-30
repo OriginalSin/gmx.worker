@@ -19,14 +19,11 @@
     }
 
     /* eslint-disable */
-    const WorkerFactory = createURLWorkerFactory('dist/web-worker-0.js');
+    const WorkerFactory = createURLWorkerFactory('geomixer/external/gmx.worker/dist/web-worker-0.js');
     /* eslint-enable */
 
-    // import DataWorker from 'web-worker:./DataWorker';
-    	// import DataWorker from 'web-worker:../worker';
-     
-    const dataWorker = new WorkerFactory();
-    dataWorker.postMessage('Hello World!');
+    const dataWorker = new WorkerFactory(); //dataWorker.postMessage('Hello World!');
+     // export {dataWorker, Utils};
 
 }());
-//# sourceMappingURL=gmxWorker.js.map
+//# sourceMappingURL=index.js.map

@@ -1,5 +1,5 @@
 {
-  "name": "gmx-worker",
+  "name": "gmxworker",
   "version": "1.0.0",
   "description": "GMX Worker",
   "main": "index.js",
@@ -10,6 +10,14 @@
   "author": "Serg Alekseev",
   "license": "ISC",
   "dependencies": {
-    "rollup": "^1.26.0"
+    "@babel/cli": "^7.6.4",
+    "@babel/core": "^7.6.4",
+    "@babel/preset-env": "^7.6.3",
+    "rollup": "^1.26.0",
+    "rollup-plugin-babel": "^4.3.3",
+    "rollup-plugin-commonjs": "^10.1.0",
+    "rollup-plugin-eslint": "^7.0.0",
+    "rollup-plugin-json": "^4.0.0",
+    "rollup-plugin-node-resolve": "^5.2.0"
   }
 }
