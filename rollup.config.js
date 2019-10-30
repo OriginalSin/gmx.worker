@@ -10,7 +10,7 @@ import webWorkerLoader from './scripts/index.js';
 export default {
     input: 'src/index.js',
 	output: {
-		file: 'dist/' + pkg.main,
+		file: pkg.main,
 		format: 'iife',
 		sourcemap: true,
 		name: 'gmxWorker'

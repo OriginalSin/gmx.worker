@@ -80,4 +80,4 @@ const Utils = {
 
 };
 
-// export {dataWorker, Utils};
+export {dataWorker, Utils};
