@@ -3,7 +3,7 @@ import Requests from './Requests.js';
 var _self = self;
 (_self.on || _self.addEventListener).call(_self, 'message', e => {
     const message = e.data || e;
-console.log('message ', e);
+// console.log('message ', e);
     switch (message.cmd) {
 		case 'getLayerItems':
 			Requests.getLayerItems({layerID: message.layerID}).then((json) => {

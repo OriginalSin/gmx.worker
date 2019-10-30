@@ -3,9 +3,19 @@ const	_self = self || window,
 		serverBase = _self.serverBase || '//maps.kosmosnimki.ru/',
 		serverProxy = serverBase + 'Plugins/ForestReport/proxy';
 
-let loaderStatus = {};
-let _sessionKeys = {};
-let _app = {};
+let _app = {},
+	loaderStatus = {},
+	_sessionKeys = {},
+	str = self.location.origin || '',
+	_protocol = str.substring(0, str.indexOf('/')),
+	syncParams = {},
+	fetchOptions = {
+		// method: 'post',
+		// headers: {'Content-type': 'application/x-www-form-urlencoded'},
+		mode: 'cors',
+		redirect: 'follow',
+		credentials: 'include'
+	};
 
 const parseURLParams = (str) => {
 	let sp = new URLSearchParams(str || location.search),
@@ -22,7 +32,147 @@ const parseURLParams = (str) => {
 	}
 	return {main: arr, keys: out};
 };
+let utils = {
+	extend: function (dest) {
+		var i, j, len, src;
 
+		for (j = 1, len = arguments.length; j < len; j++) {
+			src = arguments[j];
+			for (i in src) {
+				dest[i] = src[i];
+			}
+		}
+		return dest;
+	},
+
+	makeTileKeys: function(it, ptiles) {
+		var tklen = it.tilesOrder.length,
+			arr = it.tiles,
+			tiles = {},
+			newTiles = {};
+
+		while (arr.length) {
+			var t = arr.splice(0, tklen),
+				tk = t.join('_'),
+				tile = ptiles[tk];
+			if (!tile || !tile.data) {
+				if (!tile) {
+					tiles[tk] = {
+						tp: {z: t[0], x: t[1], y: t[2], v: t[3], s: t[4], d: t[5]}
+					};
+				} else {
+					tiles[tk] = tile;
+				}
+				newTiles[tk] = true;
+			} else {
+				tiles[tk] = tile;
+			}
+		}
+		return {tiles: tiles, newTiles: newTiles};
+	},
+
+	getDataSource: function(id, hostName) {
+		// var maps = gmx._maps[hostName];
+		// for (var mID in maps) {
+			// var ds = maps[mID].dataSources[id];
+			// if (ds) { return ds; }
+		// }
+		return null;
+	},
+
+	getZoomRange: function(info) {
+		var arr = info.properties.styles,
+			out = [40, 0];
+		for (var i = 0, len = arr.length; i < len; i++) {
+			var st = arr[i];
+			out[0] = Math.min(out[0], st.MinZoom);
+			out[1] = Math.max(out[1], st.MaxZoom);
+		}
+		out[0] = out[0] === 40 ? 1 : out[0];
+		out[1] = out[1] === 0 ? 22 : out[1];
+		return out;
+	},
+
+	chkProtocol: function(url) {
+		return url.substr(0, _protocol.length) === _protocol ? url : _protocol + url;
+	},
+	getFormBody: function(par) {
+		return Object.keys(par).map(function(key) { return encodeURIComponent(key) + '=' + encodeURIComponent(par[key]); }).join('&');
+	},
+	chkResponse: function(resp, type) {
+		if (resp.status < 200 || resp.status >= 300) {						// error
+			return Promise.reject(resp);
+		} else {
+			var contentType = resp.headers.get('Content-Type');
+			if (type === 'bitmap') {												// get blob
+				return resp.blob();
+			} else if (contentType.indexOf('application/json') > -1) {				// application/json; charset=utf-8
+				return resp.json();
+			} else if (contentType.indexOf('text/javascript') > -1) {	 			// text/javascript; charset=utf-8
+				return resp.text();
+			// } else if (contentType.indexOf('application/json') > -1) {	 		// application/json; charset=utf-8
+				// ret = resp.text();
+			// } else if (contentType.indexOf('application/json') > -1) {	 		// application/json; charset=utf-8
+				// ret = resp.formData();
+			// } else if (contentType.indexOf('application/json') > -1) {	 		// application/json; charset=utf-8
+				// ret = resp.arrayBuffer();
+			// } else {
+			}
+		}
+		return resp.text();
+	},
+	// getJson: function(url, params, options) {
+	getJson: function(queue) {
+// log('getJson', _protocol, queue, Date.now())
+		var par = utils.extend({}, queue.params, syncParams),
+			options = queue.options || {},
+			opt = utils.extend({
+				method: 'post',
+				headers: {'Content-type': 'application/x-www-form-urlencoded'}
+				// mode: 'cors',
+				// redirect: 'follow',
+				// credentials: 'include'
+			}, fetchOptions, options, {
+				body: utils.getFormBody(par)
+			});
+		return fetch(utils.chkProtocol(queue.url), opt)
+		.then(function(res) {
+			return utils.chkResponse(res, options.type);
+		})
+		.then(function(res) {
+			var out = {url: queue.url, queue: queue, load: true, res: res};
+			// if (queue.send) {
+				// handler.workerContext.postMessage(out);
+			// } else {
+				return out;
+			// }
+		})
+		.catch(function(err) {
+			return {url: queue.url, queue: queue, load: false, error: err.toString()};
+			// handler.workerContext.postMessage(out);
+		});
+    },
+
+    getTileAttributes: function(prop) {
+        var tileAttributeIndexes = {},
+            tileAttributeTypes = {};
+        if (prop.attributes) {
+            var attrs = prop.attributes,
+                attrTypes = prop.attrTypes || null;
+            if (prop.identityField) { tileAttributeIndexes[prop.identityField] = 0; }
+            for (var a = 0; a < attrs.length; a++) {
+                var key = attrs[a];
+                tileAttributeIndexes[key] = a + 1;
+                tileAttributeTypes[key] = attrTypes ? attrTypes[a] : 'string';
+            }
+        }
+        return {
+            tileAttributeTypes: tileAttributeTypes,
+            tileAttributeIndexes: tileAttributeIndexes
+        };
+    }
+};
+/*
 const requestSessionKey = (serverHost, apiKey) => {
 	let keys = _sessionKeys;
 	if (!(serverHost in keys)) {
@@ -50,35 +200,24 @@ const requestSessionKey = (serverHost, apiKey) => {
 	}
 	return keys[serverHost];
 };
-
+*/
 const getMapTree = (params) => {
 	params = params || {};
-console.log('parseURLParams', parseURLParams(params.search));
+	return utils.getJson({
+		url: serverBase + 'Map/GetMapFolder',
+		// options: {},
+		params: {
+			srs: 3857, 
+			skipTiles: 'All',
 
-	let url = `${serverBase}Map/GetMapFolder`;
-	url += '?mapId=' + (params.mapId || 'C8612B3A77D84F3F87953BEF17026A5F');
-	url += '&folderId=root';
-	url += '&srs=3857'; 
-	url += '&skipTiles=All';
-	url += '&visibleItemOnly=false';
-
-	loaderStatus[url] = true;
-
-	return fetch(url, {
-		method: 'get',
-		mode: 'cors',
-		credentials: 'include',
-		// headers: {'Accept': 'application/json'},
-		// body: JSON.stringify(params)	// TODO: сервер почему то не хочет работать так https://googlechrome.github.io/samples/fetch-api/fetch-post.html
+			mapId: (params.mapId || 'C8612B3A77D84F3F87953BEF17026A5F'),
+			folderId: 'root',
+			visibleItemOnly: false
+		}
 	})
-		.then(res => {
-			delete loaderStatus[url];
-			return res.json();
-		})
-		.then(json => {
-			return parseTree(json);
-		})
-		.catch(err => console.warn(err));
+		.then(function(json) {
+			return parseTree(json.res);
+		});
 };
 
 const _iterateNodeChilds = (node, level, out) => {

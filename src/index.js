@@ -1,7 +1,9 @@
 import DataWorker from 'web-worker:./worker';
 import Requests from './worker/Requests.js';
- 
+
 const dataWorker = new DataWorker();
+const urlPars = Requests.parseURLParams();
+		console.log('urlPars', urlPars);
 
 //dataWorker.postMessage('Hello World!');
 const Utils = {
@@ -39,9 +41,9 @@ const Utils = {
 
 			if (cmd === 'getLayerItems') {
 				if (type === 'delynka') {
-					delItems.set(json.Result);
-				} else {
-					kvItems.set(json.Result);
+					// delItems.set(json.Result);
+				// } else {
+					// kvItems.set(json.Result);
 				}
 			}
 			// console.log('onmessage', res);
@@ -55,7 +57,7 @@ const Utils = {
 				json = data.out;
 
 			if (cmd === 'getReportsCount') {
-				reportsCount.set(json);
+				// reportsCount.set(json);
 			}
 		};
 		dataWorker.postMessage({cmd: 'getReportsCount', opt: opt});
@@ -69,12 +71,11 @@ const Utils = {
 					json = data.out;
 
 				if (cmd === 'getMap') {
-					mapTree.set(json);
+					resolve(json);
 				}
 		// console.log('onmessage', json);
 			};
-			let pars = Requests.parseURLParams(location.search);
-			dataWorker.postMessage({cmd: 'getMap', mapID: pars.main.length ? pars.main[0] : mapID, search: location.search});
+			dataWorker.postMessage({cmd: 'getMap', mapID: urlPars.main.length ? urlPars.main[0] : opt.mapID, search: location.search});
 		});
 	}
 

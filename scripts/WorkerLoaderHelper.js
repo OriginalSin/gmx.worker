@@ -1,4 +1,4 @@
-const kIsNodeJS = Object.prototype.toString.call(typeof process !== 'undefined' ? process : 0) === '[object process]';
+const kIsNodeJS = Object.prototype.toString.call(typeof process !== 'undefined' ? process : 0) === '[object process]'; // eslint-disable-line
 const kRequire = kIsNodeJS ? module.require : null; // eslint-disable-line
 
 export function createInlineWorkerFactory(fn, sourcemap = null) {
@@ -41,7 +41,7 @@ export function createURLWorkerFactory(url) {
 }
 
 export function createBase64WorkerFactory(base64, sourcemap = null) {
-    const source = kIsNodeJS ? Buffer.from(base64, 'base64').toString('ascii') : atob(base64);
+    const source = kIsNodeJS ? Buffer.from(base64, 'base64').toString('ascii') : atob(base64); // eslint-disable-line
     const start = source.indexOf('\n', 10) + 1;
     const body = source.substring(start) + (sourcemap ? `//# sourceMappingURL=${sourcemap}` : '');
 
