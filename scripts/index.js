@@ -126,7 +126,7 @@ export default function workerLoaderPlugin(config = null) {
                                     source = path.posix.join(loadPath, workerID);
                                     chunk.fileName = workerID;
                                     idMap.get(id).chunk = chunk;
-source = source.replace('dist/worker/', '');
+source = source.replace('public/worker/', '');
                                 }
                                 resolve({code: utils.buildWorkerCode(source, map, inline, preserveSource)});
                             } else {

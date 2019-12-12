@@ -1,69 +1,90 @@
 import DataWorker from 'web-worker:./worker';
 import Requests from './worker/Requests.js';
+import L from 'leaflet';
 
 const dataWorker = new DataWorker();
 const urlPars = Requests.parseURLParams();
 		console.log('urlPars', urlPars);
 
+const WORLDWIDTHFULL = 40075016.685578496,
+	W = WORLDWIDTHFULL / 2,
+	// WORLDBBOX = JSON.stringify([[-W, -W, W, W]]);
+	WORLDBBOX = [[-W, -W, W, W]];
 //dataWorker.postMessage('Hello World!');
 const Utils = {
-	saveState: (data, key) => {
-		key = key || 'Forest_';
-		window.localStorage.setItem(key, JSON.stringify(data));
-	},
-	getState: key => {
-		key = key || 'Forest_';
-		return JSON.parse(window.localStorage.getItem(key)) || {};
+	getBboxes: function(map) {
+		if (map.options.allWorld) {
+			return WORLDBBOX;
+		}
+		let bbox = map.getBounds(),
+			ne = bbox.getNorthEast(),
+			sw = bbox.getSouthWest();
+		if ((ne.lng - sw.lng) > 180) {
+			return WORLDBBOX;
+		}
+		let zoom = map.getZoom(),
+			ts = L.gmxUtil.tileSizes[zoom],
+			pb = {x: ts, y: ts},
+			mbbox = L.bounds(
+				L.CRS.EPSG3857.project(sw)._subtract(pb),
+				L.CRS.EPSG3857.project(ne)._add(pb)
+			),
+
+			minY = mbbox.min.y, maxY = mbbox.max.y,
+			minX = mbbox.min.x, maxX = mbbox.max.x,
+			minX1 = null, maxX1 = null,
+			ww = WORLDWIDTHFULL,
+			size = mbbox.getSize(),
+			out = [];
+
+		if (size.x > ww) {
+			return WORLDBBOX;
+		}
+
+		if (maxX > W || minX < -W) {
+			var hs = size.x / 2,
+				center = ((maxX + minX) / 2) % ww;
+
+			center = center + (center > W ? -ww : (center < -W ? ww : 0));
+			minX = center - hs; maxX = center + hs;
+			if (minX < -W) {
+				minX1 = minX + ww; maxX1 = W; minX = -W;
+			} else if (maxX > W) {
+				minX1 = -W; maxX1 = maxX - ww; maxX = W;
+			}
+		}
+		out.push([minX, minY, maxX, maxY]);
+
+		if (minX1) {
+			out.push([minX1, minY, maxX1, maxY]);
+		}
+		return out;
+		// return JSON.stringify(out);
 	},
 
-	isDelynkaLayer: (it) => {
-		let out = false;
-		if (it._gmx) {
-			let attr = it._gmx.tileAttributeTypes;
-			out = attr.snap && attr.FRSTAT;
-		}
-		return out;
-	},
-	isKvartalLayer: (it) => {
-		let out = false;
-		if (it._gmx) {
-			let attr = it._gmx.tileAttributeTypes;
-			out = attr.kv;
-		}
-		return out;
-	},
-	getLayerItems: (it, opt) => {
+	setSyncParams: (syncParams) => {
+		syncParams = syncParams || {};
 		dataWorker.onmessage = (res) => {
-			let data = res.data,
-				cmd = data.cmd,
-				json = data.out,
-				type = opt && opt.type || 'delynka';
-
-			if (cmd === 'getLayerItems') {
-				if (type === 'delynka') {
-					// delItems.set(json.Result);
-				// } else {
-					// kvItems.set(json.Result);
+			if (res.data.cmd === 'setSyncParams') {
+				console.log('onmessage setSyncParams ', res);
+			}
+		};
+		dataWorker.postMessage({cmd: 'setSyncParams', syncParams: syncParams});
+	},
+	getSyncParams: (stringFlag) => {
+        return new Promise((resolve) => {
+			dataWorker.onmessage = (res) => {
+				if (res.data.cmd === 'getSyncParams') {
+					resolve(res.data.syncParams);
+					console.log('onmessage getSyncParams ', res);
 				}
-			}
-			// console.log('onmessage', res);
-		};
-		dataWorker.postMessage({cmd: 'getLayerItems', layerID: it.options.layerID, opt: opt});
-	},
-	getReportsCount: (opt) => {
-		dataWorker.onmessage = (res) => {
-			let data = res.data,
-				cmd = data.cmd,
-				json = data.out;
-
-			if (cmd === 'getReportsCount') {
-				// reportsCount.set(json);
-			}
-		};
-		dataWorker.postMessage({cmd: 'getReportsCount', opt: opt});
+			};
+			dataWorker.postMessage({cmd: 'getSyncParams', stringFlag: stringFlag});
+		});
 	},
 	getMap: (opt) => {
-        return new Promise((resolve, reject) => {
+		opt = opt || {};
+        return new Promise((resolve) => {
 
 			dataWorker.onmessage = (res) => {
 				let data = res.data,
@@ -75,7 +96,7 @@ const Utils = {
 				}
 		// console.log('onmessage', json);
 			};
-			dataWorker.postMessage({cmd: 'getMap', mapID: urlPars.main.length ? urlPars.main[0] : opt.mapID, search: location.search});
+			dataWorker.postMessage({cmd: 'getMap', mapID: urlPars.main.length ? urlPars.main[0] : opt.mapID, hostName: opt.hostName, search: location.search});
 		});
 	}
 
@@ -85,25 +106,58 @@ L.Map.addInitHook(function () {
 	let map = this;
 	map
 		.on('layeradd', (ev) => {
-	console.log('layeradd', ev);
-			let it = ev.layer,
-				_gmx = it._gmx;
-
-			return new Promise((resolve) => {
-				if (_gmx) {
-					dataWorker.onmessage = (res) => {
-						let data = res.data,
-							cmd = data.cmd,
-							json = data.out;
-
-						if (cmd === 'addDataSource') {
-							resolve(json);
-						}
+			if (ev.layer._gmx) {
+				let _gmx = ev.layer._gmx,
+					dm = ev.layer.getDataManager(),
+					// opt = dm.options,
+					dtInterval = dm.getMaxDateInterval(),
+					beginDate = dtInterval.beginDate || _gmx.beginDate,
+					endDate = dtInterval.endDate || _gmx.endDate,
+					pars = {
+						cmd: 'addDataSource',
+						id: _gmx.layerID,
+						// v: opt.LayerVersion,
+						hostName: _gmx.hostName,
+						bbox: Utils.getBboxes(map),
+						zoom: map.getZoom()
 					};
-					dataWorker.postMessage({cmd: 'addDataSource', id: _gmx.layerID, hostName: _gmx.hostName});
-				} else {
-					resolve({error: 'Not Geomixer layer'});
+				if (window.apiKey && pars.hostName === 'maps.kosmosnimki.ru') {
+					pars.apiKey = window.apiKey;
 				}
+				if (beginDate) {
+					pars.dateBegin = Math.floor(beginDate.getTime() / 1000);
+				}
+				if (endDate) {
+					pars.dateEnd = Math.floor(endDate.getTime() / 1000);
+				}
+				if (map.options.generalized === false) {
+					pars.generalizedTiles = false;
+				}
+// console.log('layeradd', opt, dm.getD);
+
+				return new Promise((resolve) => {
+					if (_gmx) {
+						dataWorker.onmessage = (res) => {
+							let data = res.data,
+								cmd = data.cmd,
+								json = data.out;
+
+							if (cmd === 'addDataSource') {
+								resolve(json);
+							}
+						};
+						dataWorker.postMessage(pars);
+					} else {
+						resolve({error: 'Not Geomixer layer'});
+					}
+				});
+			}
+		})
+		.on('moveend', () => {
+			dataWorker.postMessage({
+				cmd: 'moveend',
+				bbox: Utils.getBboxes(map),
+				zoom: map.getZoom()
 			});
 		})
 		.on('layerremove', (ev) => {
@@ -128,6 +182,11 @@ L.Map.addInitHook(function () {
 				}
 			});
 		});
+	Utils.getMap()
+		.then(console.log)
+
 });
+
+L.gmxWorker = Utils;
 
 export {dataWorker, Utils};

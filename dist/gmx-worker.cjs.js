@@ -1,3 +1,32 @@
+'use strict';
+
+Object.defineProperty(exports, '__esModule', { value: true });
+
+function _interopDefault (ex) { return (ex && (typeof ex === 'object') && 'default' in ex) ? ex['default'] : ex; }
+
+var L = _interopDefault(require('leaflet'));
+
+const kIsNodeJS = Object.prototype.toString.call(typeof process !== 'undefined' ? process : 0) === '[object process]'; // eslint-disable-line
+const kRequire = kIsNodeJS ? module.require : null; // eslint-disable-line
+
+function createURLWorkerFactory(url) {
+    if (kIsNodeJS) {
+        /* node.js */
+        const Worker = kRequire('worker_threads').Worker; // eslint-disable-line
+        return function WorkerFactory(options) {
+            return new Worker(url, options);
+        };
+    }
+    /* browser */
+    return function WorkerFactory(options) {
+        return new Worker(url, options);
+    };
+}
+
+/* eslint-disable */
+var WorkerFactory = createURLWorkerFactory('geomixer/external/gmx.worker/dist/web-worker-0.js');
+/* eslint-enable */
+
 var _self = self || window,
     serverBase = _self.serverBase || 'maps.kosmosnimki.ru/',
     // serverProxy = serverBase + 'Plugins/ForestReport/proxy',
@@ -535,354 +564,221 @@ var Requests = {
 
 };
 
-var load = function load(pars) {
-  pars = pars || {};
-  console.log('load:', pars);
-
-  if (!pars.signals) {
-    pars.signals = {};
-  }
-
-  return new Promise(function (resolve, reject) {
-    var arr = [];
-    var pb = pars.tiles;
-
-    for (var i = 0, len = pb.length; i < len; i += 6) {
-      arr.push(Requests.getJson({
-        url: '//' + pars.hostName + '/TileSender.ashx',
-        options: Requests.chkSignal('TileLoader', pars.signals, {
-          mode: 'cors',
-          credentials: 'include'
-        }),
-        paramsArr: [Requests.COMPARS, {
-          z: pb[i],
-          x: pb[i + 1],
-          y: pb[i + 2],
-          v: pb[i + 3],
-          Level: pb[i + 4],
-          Span: pb[i + 5],
-          LayerName: pars.id // bboxes: JSON.stringify(bbox || [WORLDBBOX]),
-          // generalizedTiles: false,
-          // zoom: zoom
-
-        }]
-      }).then(function (json) {
-        delete pars.signals.TileLoader;
-        return json;
-      }).catch(function (err) {
-        console.error(err); // resolve('');
-      }));
-    }
-  });
-};
-
-var TilesLoader = {
-  load: load
-};
-
-var HOST = 'maps.kosmosnimki.ru',
-    WORLDWIDTHFULL = 40075016.685578496,
+var dataWorker = new WorkerFactory();
+var urlPars = Requests.parseURLParams();
+console.log('urlPars', urlPars);
+var WORLDWIDTHFULL = 40075016.685578496,
     W = WORLDWIDTHFULL / 2,
-    WORLDBBOX = [[-W, -W, W, W]],
-    SCRIPT = '/Layer/CheckVersion.ashx';
-var hosts = {},
-    zoom = 3,
-    bbox = null,
-    // dataManagersLinks = {},
-// hostBusy = {},
-// needReq = {}
-delay = 60000,
-    intervalID = null,
-    timeoutID = null;
-var utils$1 = {
-  now: function now() {
-    if (timeoutID) {
-      clearTimeout(timeoutID);
+    // WORLDBBOX = JSON.stringify([[-W, -W, W, W]]);
+WORLDBBOX = [[-W, -W, W, W]]; //dataWorker.postMessage('Hello World!');
+
+var Utils = {
+  getBboxes: function getBboxes(map) {
+    if (map.options.allWorld) {
+      return WORLDBBOX;
     }
 
-    timeoutID = setTimeout(chkVersion, 0);
+    var bbox = map.getBounds(),
+        ne = bbox.getNorthEast(),
+        sw = bbox.getSouthWest();
+
+    if (ne.lng - sw.lng > 180) {
+      return WORLDBBOX;
+    }
+
+    var zoom = map.getZoom(),
+        ts = L.gmxUtil.tileSizes[zoom],
+        pb = {
+      x: ts,
+      y: ts
+    },
+        mbbox = L.bounds(L.CRS.EPSG3857.project(sw)._subtract(pb), L.CRS.EPSG3857.project(ne)._add(pb)),
+        minY = mbbox.min.y,
+        maxY = mbbox.max.y,
+        minX = mbbox.min.x,
+        maxX = mbbox.max.x,
+        minX1 = null,
+        maxX1 = null,
+        ww = WORLDWIDTHFULL,
+        size = mbbox.getSize(),
+        out = [];
+
+    if (size.x > ww) {
+      return WORLDBBOX;
+    }
+
+    if (maxX > W || minX < -W) {
+      var hs = size.x / 2,
+          center = (maxX + minX) / 2 % ww;
+      center = center + (center > W ? -ww : center < -W ? ww : 0);
+      minX = center - hs;
+      maxX = center + hs;
+
+      if (minX < -W) {
+        minX1 = minX + ww;
+        maxX1 = W;
+        minX = -W;
+      } else if (maxX > W) {
+        minX1 = -W;
+        maxX1 = maxX - ww;
+        maxX = W;
+      }
+    }
+
+    out.push([minX, minY, maxX, maxY]);
+
+    if (minX1) {
+      out.push([minX1, minY, maxX1, maxY]);
+    }
+
+    return out; // return JSON.stringify(out);
   },
-  stop: function stop() {
-    console.log('stop:', intervalID, delay);
+  setSyncParams: function setSyncParams(syncParams) {
+    syncParams = syncParams || {};
 
-    if (intervalID) {
-      clearInterval(intervalID);
-    }
-
-    intervalID = null;
-  },
-  start: function start(msec) {
-    console.log('start:', intervalID, msec);
-
-    if (msec) {
-      delay = msec;
-    }
-
-    utils$1.stop();
-    intervalID = setInterval(chkVersion, delay);
-  }
-}; // const COMPARS = {WrapStyle: 'None', ftc: 'osm', srs: 3857};
-// const chkSignal = (signalName, signals, opt) => {
-// opt = opt || {};
-// let sObj = signals[signalName];
-// if (sObj) { sObj.abort(); }
-// sObj = signals[signalName] = new AbortController();
-// sObj.signal.addEventListener('abort', (ev) => console.log('Отмена fetch:', ev));
-// opt.signal = sObj.signal;
-// signals[signalName] = sObj;
-// return opt;
-// };
-
-var chkHost = function chkHost(hostName) {
-  console.log('chkVersion:', hostName, hosts);
-  var hostLayers = hosts[hostName],
-      ids = hostLayers.ids,
-      arr = [];
-
-  for (var name in ids) {
-    var pt = ids[name],
-        pars = {
-      Name: name,
-      Version: 'v' in pt ? pt.v : -1
+    dataWorker.onmessage = function (res) {
+      if (res.data.cmd === 'setSyncParams') {
+        console.log('onmessage setSyncParams ', res);
+      }
     };
 
-    if (pt.dateBegin) {
-      pars.dateBegin = pt.dateBegin;
-    }
-
-    if (pt.dateEnd) {
-      pars.dateEnd = pt.dateEnd;
-    }
-
-    arr.push(pars);
-  }
-
-  return Requests.getJson({
-    url: '//' + hostName + SCRIPT,
-    options: Requests.chkSignal('chkVersion', hostLayers.signals),
-    paramsArr: [Requests.COMPARS, {
-      layers: JSON.stringify(arr),
-      bboxes: JSON.stringify(bbox || [WORLDBBOX]),
-      generalizedTiles: false,
-      zoom: zoom
-    }]
-  }).then(function (json) {
-    delete hostLayers.signals.chkVersion;
-    return json;
-  }).catch(function (err) {
-    console.error(err); // resolve('');
-  });
-};
-
-var chkVersion = function chkVersion() {
-  var _loop = function _loop(key) {
-    chkHost(key).then(function (json) {
-      if (json.error) {
-        console.warn('chkVersion:', json.error);
-      } else {
-        var hostLayers = hosts[key],
-            ids = hostLayers.ids,
-            res = json.res;
-
-        if (res.Status === 'ok' && res.Result) {
-          res.Result.forEach(function (it) {
-            var pt = ids[it.name],
-                props = it.properties;
-
-            if (props) {
-              pt.v = props.LayerVersion;
-              pt.properties = props;
-              pt.geometry = it.geometry;
-            }
-
-            pt.tiles = it.tiles;
-            pt.tilesOrder = it.tilesOrder;
-            pt.tilePromises = TilesLoader.load(pt); // console.log('chkVersion ___:', id, pt, v);
-          }); // resolve(res.Result.Key !== 'null' ? '' : res.Result.Key);
-          // } else {
-          // reject(json);
-
-          console.log('chkVersion key:', key, hosts);
-        }
-      }
+    dataWorker.postMessage({
+      cmd: 'setSyncParams',
+      syncParams: syncParams
     });
-  };
-
-  // console.log('chkVersion:', id, hosts);
-  for (var key in hosts) {
-    _loop(key);
-  }
-};
-
-var addSource = function addSource(pars) {
-  pars = pars || {};
-  var id = pars.id;
-
-  if ('zoom' in pars) {
-    zoom = pars.zoom;
-  }
-
-  if ('bbox' in pars) {
-    bbox = pars.bbox;
-  }
-
-  if (id) {
-    var hostName = pars.hostName || HOST;
-
-    if (!hosts[hostName]) {
-      hosts[hostName] = {
-        ids: {},
-        signals: {}
+  },
+  getSyncParams: function getSyncParams(stringFlag) {
+    return new Promise(function (resolve) {
+      dataWorker.onmessage = function (res) {
+        if (res.data.cmd === 'getSyncParams') {
+          resolve(res.data.syncParams);
+          console.log('onmessage getSyncParams ', res);
+        }
       };
 
-      if (pars.apiKey) {
-        hosts[hostName].apiKeyPromise = Requests.getJson({
-          url: '//' + hostName + '/ApiKey.ashx',
-          paramsArr: [Requests.COMPARS, {
-            Key: pars.apiKey
-          }]
-        }).then(function (json) {
-          // console.log('/ApiKey.ashx', json);
-          var res = json.res;
+      dataWorker.postMessage({
+        cmd: 'getSyncParams',
+        stringFlag: stringFlag
+      });
+    });
+  },
+  getMap: function getMap(opt) {
+    opt = opt || {};
+    return new Promise(function (resolve) {
+      dataWorker.onmessage = function (res) {
+        var data = res.data,
+            cmd = data.cmd,
+            json = data.out;
 
-          if (res.Status === 'ok' && res.Result) {
-            hosts[hostName].Key = res.Result.Key;
-            return hosts[hostName].Key;
+        if (cmd === 'getMap') {
+          resolve(json);
+        } // console.log('onmessage', json);
+
+      };
+
+      dataWorker.postMessage({
+        cmd: 'getMap',
+        mapID: urlPars.main.length ? urlPars.main[0] : opt.mapID,
+        hostName: opt.hostName,
+        search: location.search
+      });
+    });
+  }
+};
+L.Map.addInitHook(function () {
+  var map = this;
+  map.on('layeradd', function (ev) {
+    if (ev.layer._gmx) {
+      var _gmx = ev.layer._gmx,
+          dm = ev.layer.getDataManager(),
+          // opt = dm.options,
+      dtInterval = dm.getMaxDateInterval(),
+          beginDate = dtInterval.beginDate || _gmx.beginDate,
+          endDate = dtInterval.endDate || _gmx.endDate,
+          pars = {
+        cmd: 'addDataSource',
+        id: _gmx.layerID,
+        // v: opt.LayerVersion,
+        hostName: _gmx.hostName,
+        bbox: Utils.getBboxes(map),
+        zoom: map.getZoom()
+      };
+
+      if (window.apiKey && pars.hostName === 'maps.kosmosnimki.ru') {
+        pars.apiKey = window.apiKey;
+      }
+
+      if (beginDate) {
+        pars.dateBegin = Math.floor(beginDate.getTime() / 1000);
+      }
+
+      if (endDate) {
+        pars.dateEnd = Math.floor(endDate.getTime() / 1000);
+      }
+
+      if (map.options.generalized === false) {
+        pars.generalizedTiles = false;
+      } // console.log('layeradd', opt, dm.getD);
+
+
+      return new Promise(function (resolve) {
+        if (_gmx) {
+          dataWorker.onmessage = function (res) {
+            var data = res.data,
+                cmd = data.cmd,
+                json = data.out;
+
+            if (cmd === 'addDataSource') {
+              resolve(json);
+            }
+          };
+
+          dataWorker.postMessage(pars);
+        } else {
+          resolve({
+            error: 'Not Geomixer layer'
+          });
+        }
+      });
+    }
+  }).on('moveend', function () {
+    dataWorker.postMessage({
+      cmd: 'moveend',
+      bbox: Utils.getBboxes(map),
+      zoom: map.getZoom()
+    });
+  }).on('layerremove', function (ev) {
+    console.log('layerremove', ev);
+    var it = ev.layer,
+        _gmx = it._gmx;
+    return new Promise(function (resolve) {
+      if (_gmx) {
+        dataWorker.onmessage = function (res) {
+          var data = res.data,
+              cmd = data.cmd,
+              json = data.out;
+
+          if (cmd === 'removeDataSource') {
+            resolve(json);
           }
+        };
+
+        dataWorker.postMessage({
+          cmd: 'removeDataSource',
+          id: _gmx.layerID,
+          hostName: _gmx.hostName
+        });
+      } else {
+        resolve({
+          error: 'Not Geomixer layer'
         });
       }
-    }
-
-    hosts[hostName].ids[id] = pars;
-
-    if (!intervalID) {
-      utils$1.start();
-    }
-
-    utils$1.now();
-  } else {
-    console.warn('Warning: Specify layer `id` and `hostName`', pars);
-  } // console.log('addSource:', pars);
-
-
-  return;
-};
-
-var removeSource = function removeSource(pars) {
-  pars = pars || {};
-  var id = pars.id;
-
-  if (id) {
-    var hostName = pars.hostName || HOST;
-
-    if (hosts[hostName]) {
-      delete hosts[hostName].ids[id];
-
-      if (Object.keys(hosts[hostName].ids).length === 0) {
-        delete hosts[hostName];
-      }
-
-      if (Object.keys(hosts).length === 0) {
-        utils$1.stop();
-      }
-    }
-  } else {
-    console.warn('Warning: Specify layer id and hostName', pars);
-  } // console.log('removeSource:', pars);
-  //Requests.removeDataSource({id: message.layerID, hostName: message.hostName}).then((json) => {
-
-
-  return;
-};
-
-var moveend = function moveend(pars) {
-  pars = pars || {};
-  console.log('moveend:', pars);
-
-  if ('zoom' in pars) {
-    zoom = pars.zoom;
-  }
-
-  if ('bbox' in pars) {
-    bbox = pars.bbox;
-  }
-
-  utils$1.now();
-  return;
-};
-
-var DataVersion = {
-  moveend: moveend,
-  removeSource: removeSource,
-  addSource: addSource
-};
-
-var _self$1 = self;
-
-(_self$1.on || _self$1.addEventListener).call(_self$1, 'message', function (e) {
-  var message = e.data || e; // console.log('message ', e);
-
-  switch (message.cmd) {
-    case 'getLayerItems':
-      Requests.getLayerItems({
-        layerID: message.layerID
-      }).then(function (json) {
-        message.out = json;
-        var pt = {};
-        json.Result.fields.forEach(function (name, i) {
-          pt[name] = i;
-        });
-        json.Result.fieldKeys = pt;
-
-        _self$1.postMessage(message);
-      });
-      break;
-
-    case 'getMap':
-      Requests.getMapTree({
-        mapId: message.mapID,
-        hostName: message.hostName,
-        search: message.search
-      }).then(function (json) {
-        message.out = json;
-
-        _self$1.postMessage(message);
-      });
-      break;
-
-    case 'setSyncParams':
-      Requests.setSyncParams(message.syncParams);
-      break;
-
-    case 'getSyncParams':
-      message.syncParams = Requests.getSyncParams(message.stringFlag);
-
-      _self$1.postMessage(message);
-
-      break;
-
-    case 'addDataSource':
-      DataVersion.addSource(message); // .then((json) => {
-      // message.out = json;
-      // _self.postMessage(message);
-      // });
-
-      break;
-
-    case 'removeDataSource':
-      DataVersion.removeSource({
-        id: message.id,
-        hostName: message.hostName
-      });
-      break;
-
-    case 'moveend':
-      DataVersion.moveend(message);
-      break;
-
-    default:
-      console.warn('Неизвестная команда:', message.cmd);
-      break;
-  }
+    });
+  });
+  Utils.getMap().then(console.log);
 });
-//# sourceMappingURL=web-worker-0.js.map
+L.gmxWorker = Utils;
+
+exports.Utils = Utils;
+exports.dataWorker = dataWorker;
+//# sourceMappingURL=gmx-worker.cjs.js.map

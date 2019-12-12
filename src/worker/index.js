@@ -1,4 +1,5 @@
 import Requests from './Requests.js';
+import DataVersion from './DataSourceVersion';
 
 var _self = self;
 (_self.on || _self.addEventListener).call(_self, 'message', e => {
@@ -15,22 +16,30 @@ var _self = self;
 			});
 			break;
 		case 'getMap':
-			Requests.getMapTree({mapId: message.mapID, search: message.search}).then((json) => {
+			Requests.getMapTree({mapId: message.mapID, hostName: message.hostName, search: message.search}).then((json) => {
 				message.out = json;
 				_self.postMessage(message);
 			});
+			break;
+		case 'setSyncParams':
+			Requests.setSyncParams(message.syncParams);
+			break;
+		case 'getSyncParams':
+			message.syncParams = Requests.getSyncParams(message.stringFlag);
+			_self.postMessage(message);
 			break;
 		case 'addDataSource':
-			Requests.addDataSource({id: message.layerID, hostName: message.hostName}).then((json) => {
-				message.out = json;
-				_self.postMessage(message);
-			});
+			DataVersion.addSource(message);
+			// .then((json) => {
+				// message.out = json;
+				// _self.postMessage(message);
+			// });
 			break;
 		case 'removeDataSource':
-			Requests.removeDataSource({id: message.layerID, hostName: message.hostName}).then((json) => {
-				message.out = json;
-				_self.postMessage(message);
-			});
+			DataVersion.removeSource({id: message.id, hostName: message.hostName});
+			break;
+		case 'moveend':
+			DataVersion.moveend(message);
 			break;
 		default:
 			console.warn('Неизвестная команда:', message.cmd);
