@@ -5,7 +5,8 @@ const HOST = 'maps.kosmosnimki.ru',
     WORLDWIDTHFULL = 40075016.685578496,
 	W = WORLDWIDTHFULL / 2,
 	WORLDBBOX = [[-W, -W, W, W]],
-    SCRIPT = '/Layer/CheckVersion.ashx';
+    SCRIPT = '/Layer/CheckVersion.ashx',
+	GMXPROXY = '//maps.kosmosnimki.ru/ApiSave.ashx';
 
 let hosts = {},
     zoom = 3,
@@ -34,7 +35,81 @@ const utils = {
         if (msec) { delay = msec; }
         utils.stop();
         intervalID = setInterval(chkVersion, delay);
+    },
+
+    parseLayerProps: function(prop) {
+		// let ph = utils.getTileAttributes(prop);
+		return Requests.extend(
+			{
+				properties: prop
+			},
+			utils.getTileAttributes(prop),
+			utils.parseMetaProps(prop)
+		);
+    },
+
+    parseMetaProps: function(prop) {
+        var meta = prop.MetaProperties || {},
+            ph = {};
+        ph.dataSource = prop.dataSource || prop.LayerID;
+		if ('parentLayer' in meta) {								// изменить dataSource через MetaProperties
+			ph.dataSource = meta.parentLayer.Value || '';
+		}
+		[
+			'srs',					// проекция слоя
+			'gmxProxy',				// установка прокачивалки
+			'filter',				// фильтр слоя
+			'isGeneralized',		// флаг generalization
+			'isFlatten',			// флаг flatten
+			'multiFilters',			// проверка всех фильтров для обьектов слоя
+			'showScreenTiles',		// показывать границы экранных тайлов
+			'dateBegin',			// фильтр по дате начало периода
+			'dateEnd',				// фильтр по дате окончание периода
+			'shiftX',				// сдвиг всего слоя
+			'shiftY',				// сдвиг всего слоя
+			'shiftXfield',			// сдвиг растров объектов слоя
+			'shiftYfield',			// сдвиг растров объектов слоя
+			'quicklookPlatform',	// тип спутника
+			'quicklookX1',			// точки привязки снимка
+			'quicklookY1',			// точки привязки снимка
+			'quicklookX2',			// точки привязки снимка
+			'quicklookY2',			// точки привязки снимка
+			'quicklookX3',			// точки привязки снимка
+			'quicklookY3',			// точки привязки снимка
+			'quicklookX4',			// точки привязки снимка
+			'quicklookY4'			// точки привязки снимка
+		].forEach((k) => {
+			ph[k] = k in meta ? meta[k].Value : '';
+		});
+		if (ph.gmxProxy.toLowerCase() === 'true') {    // проверка прокачивалки
+			ph.gmxProxy = GMXPROXY;
+		}
+		if ('parentLayer' in meta) {  // фильтр слоя		// todo удалить после изменений вов вьювере
+			ph.dataSource = meta.parentLayer.Value || prop.dataSource || '';
+		}
+
+        return ph;
+    },
+
+    getTileAttributes: function(prop) {
+        var tileAttributeIndexes = {},
+            tileAttributeTypes = {};
+        if (prop.attributes) {
+            var attrs = prop.attributes,
+                attrTypes = prop.attrTypes || null;
+            if (prop.identityField) { tileAttributeIndexes[prop.identityField] = 0; }
+            for (var a = 0; a < attrs.length; a++) {
+                var key = attrs[a];
+                tileAttributeIndexes[key] = a + 1;
+                tileAttributeTypes[key] = attrTypes ? attrTypes[a] : 'string';
+            }
+        }
+        return {
+            tileAttributeTypes: tileAttributeTypes,
+            tileAttributeIndexes: tileAttributeIndexes
+        };
     }
+
 };
 
 // const COMPARS = {WrapStyle: 'None', ftc: 'osm', srs: 3857};
@@ -216,6 +291,47 @@ const setDateInterval = (pars) => {
 console.log('setDateInterval:', pars, hosts);
 };
 
+const _iterateNodeChilds = (node, level, out) => {
+	level = level || 0;
+	out = out || {
+		layers: []
+	};
+	
+	if (node) {
+		let type = node.type,
+			content = node.content,
+			props = content.properties;
+		if (type === 'layer') {
+			let ph = utils.parseLayerProps(props);
+			ph.level = level;
+			if (content.geometry) { ph.geometry = content.geometry; }
+			out.layers.push(ph);
+		} else if (type === 'group') {
+			let childs = content.children || [];
+			out.layers.push({ level: level, group: true, childsLen: childs.length, properties: props });
+			childs.map((it) => {
+				_iterateNodeChilds(it, level + 1, out);
+			});
+		}
+		
+	} else {
+		return out;
+	}
+	return out;
+};
+
+const parseTree = (json) => {
+	let out = {};
+	if (json.Status === 'error') {
+		out = json;
+	} else if (json.Result && json.Result.content) {
+		out = _iterateNodeChilds(json.Result);
+		out.mapAttr = out.layers.shift();
+	}
+// console.log('______json_out_______', out, json)
+	return out;
+};
+
 const getMapTree = (pars) => {
 	pars = pars || {};
 	let hostName = pars.hostName || HOST,
@@ -236,22 +352,14 @@ const getMapTree = (pars) => {
 					visibleItemOnly: false
 				}
 			}).then(json => {
-console.log('getMapTree:', hosts, json);
 				if (!hosts[hostName]) { hosts[hostName] = {ids: {}, signals: {}}; }
-				hosts[hostName].layerTree = json.res.Result;
+ console.log('getMapTree:', hosts, json);
 				resolve(json);
+				hosts[hostName].layerTree = json.res.Result;
+				hosts[hostName].parseLayers = parseTree(json.res);
 			})
 		}
 	});
-			// DataVersion.getMapTree({mapID: message.mapID, hostName: message.hostName, search: message.search}).then((json) => {
-
-	// let host = hosts[pars.hostName];
-	// if (host && host.ids[pars.id]) {
-		// host.ids[pars.id].dateBegin = pars.dateBegin;
-		// host.ids[pars.id].dateEnd = pars.dateEnd;
-	// }
-	// utils.now();
-
 };
 
 export default {

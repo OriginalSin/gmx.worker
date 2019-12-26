@@ -1,10 +1,12 @@
-var // serverProxy = serverBase + 'Plugins/ForestReport/proxy',
-gmxProxy = '//maps.kosmosnimki.ru/ApiSave.ashx'; // let _app = {},
+var _self = self || window; // serverBase = _self.serverBase || 'maps.kosmosnimki.ru/',
+// serverProxy = serverBase + 'Plugins/ForestReport/proxy',
+// gmxProxy = '//maps.kosmosnimki.ru/ApiSave.ashx';
+// let _app = {},
 // loaderStatus = {},
 // _sessionKeys = {},
 
 
-var str = self.location.origin || '',
+var str = _self.location.origin || '',
     _protocol = str.substring(0, str.indexOf('/')),
     syncParams = {},
     fetchOptions = {
@@ -239,108 +241,184 @@ var utils = {
         error: err.toString()
       }; // handler.workerContext.postMessage(out);
     });
-  },
-  parseLayerProps: function parseLayerProps(prop) {
-    // let ph = utils.getTileAttributes(prop);
-    return utils.extend({
-      properties: prop
-    }, utils.getTileAttributes(prop), utils.parseMetaProps(prop)); // return ph;
-  },
-  parseMetaProps: function parseMetaProps(prop) {
-    var meta = prop.MetaProperties || {},
-        ph = {};
-    ph.dataSource = prop.dataSource || prop.LayerID;
-
-    if ('parentLayer' in meta) {
-      // изменить dataSource через MetaProperties
-      ph.dataSource = meta.parentLayer.Value || '';
-    }
-
-    ['srs', // проекция слоя
-    'gmxProxy', // установка прокачивалки
-    'filter', // фильтр слоя
-    'isGeneralized', // флаг generalization
-    'isFlatten', // флаг flatten
-    'multiFilters', // проверка всех фильтров для обьектов слоя
-    'showScreenTiles', // показывать границы экранных тайлов
-    'dateBegin', // фильтр по дате начало периода
-    'dateEnd', // фильтр по дате окончание периода
-    'shiftX', // сдвиг всего слоя
-    'shiftY', // сдвиг всего слоя
-    'shiftXfield', // сдвиг растров объектов слоя
-    'shiftYfield', // сдвиг растров объектов слоя
-    'quicklookPlatform', // тип спутника
-    'quicklookX1', // точки привязки снимка
-    'quicklookY1', // точки привязки снимка
-    'quicklookX2', // точки привязки снимка
-    'quicklookY2', // точки привязки снимка
-    'quicklookX3', // точки привязки снимка
-    'quicklookY3', // точки привязки снимка
-    'quicklookX4', // точки привязки снимка
-    'quicklookY4' // точки привязки снимка
-    ].forEach(function (k) {
-      ph[k] = k in meta ? meta[k].Value : '';
-    });
-
-    if (ph.gmxProxy.toLowerCase() === 'true') {
-      // проверка прокачивалки
-      ph.gmxProxy = gmxProxy;
-    }
-
-    if ('parentLayer' in meta) {
-      // фильтр слоя		// todo удалить после изменений вов вьювере
-      ph.dataSource = meta.parentLayer.Value || prop.dataSource || '';
-    }
-
-    return ph;
-  },
-  getTileAttributes: function getTileAttributes(prop) {
-    var tileAttributeIndexes = {},
-        tileAttributeTypes = {};
-
-    if (prop.attributes) {
-      var attrs = prop.attributes,
-          attrTypes = prop.attrTypes || null;
-
-      if (prop.identityField) {
-        tileAttributeIndexes[prop.identityField] = 0;
-      }
-
-      for (var a = 0; a < attrs.length; a++) {
-        var key = attrs[a];
-        tileAttributeIndexes[key] = a + 1;
-        tileAttributeTypes[key] = attrTypes ? attrTypes[a] : 'string';
-      }
-    }
-
-    return {
-      tileAttributeTypes: tileAttributeTypes,
-      tileAttributeIndexes: tileAttributeIndexes
-    };
   }
 };
-
-var getMapTree = function getMapTree(pars) {
-  pars = pars || {};
-  var hostName = pars.hostName || 'maps.kosmosnimki.ru',
-      id = pars.mapID;
-  return utils.getJson({
-    url: '//' + hostName + '/Map/GetMapFolder',
-    // options: {},
-    params: {
-      srs: 3857,
-      skipTiles: 'All',
-      mapId: id,
-      folderId: 'root',
-      visibleItemOnly: false
-    }
-  }); // .then(function(json) {
-  // let out = parseTree(json.res);
-  // _maps[hostName] = _maps[hostName] || {};
-  // _maps[hostName][id] = out;
-  // return parseTree(out);
-  // });
+/*
+const requestSessionKey = (serverHost, apiKey) => {
+	let keys = _sessionKeys;
+	if (!(serverHost in keys)) {
+		keys[serverHost] = new Promise(function(resolve, reject) {
+			if (apiKey) {
+				utils.getJson({
+					url: '//' + serverHost + '/ApiKey.ashx',
+					params: {WrapStyle: 'None', Key: apiKey}
+				})
+					.then(function(json) {
+						let res = json.res;
+						if (res.Status === 'ok' && res.Result) {
+							resolve(res.Result.Key !== 'null' ? '' : res.Result.Key);
+						} else {
+							reject(json);
+						}
+					})
+					.catch(function() {
+						resolve('');
+					});
+			} else {
+				resolve('');
+			}
+		});
+	}
+	return keys[serverHost];
 };
+let _maps = {};
+const getMapTree = (pars) => {
+	pars = pars || {};
+	let hostName = pars.hostName || serverBase,
+		id = pars.mapId;
+	return utils.getJson({
+		url: '//' + hostName + '/Map/GetMapFolder',
+		// options: {},
+		params: {
+			srs: 3857, 
+			skipTiles: 'All',
+
+			mapId: id,
+			folderId: 'root',
+			visibleItemOnly: false
+		}
+	})
+		.then(function(json) {
+			let out = parseTree(json.res);
+			_maps[hostName] = _maps[hostName] || {};
+			_maps[hostName][id] = out;
+			return parseTree(out);
+		});
+};
+const getReq = url => {
+	return fetch(url, {
+			method: 'get',
+			mode: 'cors',
+			credentials: 'include'
+		// headers: {'Accept': 'application/json'},
+		// body: JSON.stringify(params)	// TODO: сервер почему то не хочет работать так https://googlechrome.github.io/samples/fetch-api/fetch-post.html
+		})
+		.then(res => res.json())
+		.catch(err => console.warn(err));
+};
+
+// const getLayerItems = (params) => {
+	// params = params || {};
+
+	// let url = `${serverBase}VectorLayer/Search.ashx`;
+	// url += '?layer=' + params.layerID;
+	// if (params.id) { '&query=gmx_id=' + params.id; }
+
+	// url += '&out_cs=EPSG:4326';
+	// url += '&geometry=true';
+	// return getReq(url);
+// };
+// const getReportsCount = () => {
+	// return getReq(serverProxy + '?path=/rest/v1/get-current-user-info');
+// };
+
+let dataSources = {},
+	loaderStatus1 = {};
+
+const addDataSource = (pars) => {
+	pars = pars || {};
+
+	let id = pars.id;
+	if (id) {
+		let hostName = pars.hostName;
+		
+	} else {
+		console.warn('Warning: Specify layer \'id\' and \'hostName\`', pars);
+	}
+console.log('addDataSource:', pars);
+	return;
+};
+
+const removeDataSource = (pars) => {
+	pars = pars || {};
+
+	let id = pars.id;
+	if (id) {
+		let hostName = pars.hostName;
+		
+	} else {
+		console.warn('Warning: Specify layer \'id\' and \'hostName\`', pars);
+	}
+console.log('removeDataSource:', pars);
+	//Requests.removeDataSource({id: message.layerID, hostName: message.hostName}).then((json) => {
+	return;
+};
+let _maps = {};
+const getMapTree = (pars) => {
+	pars = pars || {};
+	let hostName = pars.hostName || 'maps.kosmosnimki.ru',
+		id = pars.mapID;
+	return utils.getJson({
+		url: '//' + hostName + '/Map/GetMapFolder',
+		// options: {},
+		params: {
+			srs: 3857, 
+			skipTiles: 'All',
+
+			mapId: id,
+			folderId: 'root',
+			visibleItemOnly: false
+		}
+	})
+		// .then(function(json) {
+			// let out = parseTree(json.res);
+			// _maps[hostName] = _maps[hostName] || {};
+			// _maps[hostName][id] = out;
+			// return parseTree(out);
+		// });
+};
+
+const _iterateNodeChilds = (node, level, out) => {
+	level = level || 0;
+	out = out || {
+		layers: []
+	};
+	
+	if (node) {
+		let type = node.type,
+			content = node.content,
+			props = content.properties;
+		if (type === 'layer') {
+			let ph = utils.parseLayerProps(props);
+			ph.level = level;
+			if (content.geometry) { ph.geometry = content.geometry; }
+			out.layers.push(ph);
+		} else if (type === 'group') {
+			let childs = content.children || [];
+			out.layers.push({ level: level, group: true, childsLen: childs.length, properties: props });
+			childs.map((it) => {
+				_iterateNodeChilds(it, level + 1, out);
+			});
+		}
+		
+	} else {
+		return out;
+	}
+	return out;
+};
+
+const parseTree = (json) => {
+	let out = {};
+	if (json.Status === 'error') {
+		out = json;
+	} else if (json.Result && json.Result.content) {
+		out = _iterateNodeChilds(json.Result);
+		out.mapAttr = out.layers.shift();
+	}
+// console.log('______json_out_______', out, json)
+	return out;
+};
+*/
 
 var chkSignal = function chkSignal(signalName, signals, opt) {
   opt = opt || {};
@@ -365,7 +443,8 @@ var Requests = {
   setSyncParams: setSyncParams,
   getSyncParams: getSyncParams,
   parseURLParams: parseURLParams,
-  getMapTree: getMapTree,
+  // getMapTree,
+  extend: utils.extend,
   getFormBody: utils.getFormBody,
   getTileJson: utils.getTileJson,
   getJson: utils.getJson // addDataSource,
@@ -455,7 +534,8 @@ var HOST = 'maps.kosmosnimki.ru',
     WORLDWIDTHFULL = 40075016.685578496,
     W = WORLDWIDTHFULL / 2,
     WORLDBBOX = [[-W, -W, W, W]],
-    SCRIPT = '/Layer/CheckVersion.ashx';
+    SCRIPT = '/Layer/CheckVersion.ashx',
+    GMXPROXY = '//maps.kosmosnimki.ru/ApiSave.ashx';
 var hosts = {},
     zoom = 3,
     bbox = null,
@@ -491,6 +571,84 @@ var utils$1 = {
 
     utils$1.stop();
     intervalID = setInterval(chkVersion, delay);
+  },
+  parseLayerProps: function parseLayerProps(prop) {
+    // let ph = utils.getTileAttributes(prop);
+    return Requests.extend({
+      properties: prop
+    }, utils$1.getTileAttributes(prop), utils$1.parseMetaProps(prop));
+  },
+  parseMetaProps: function parseMetaProps(prop) {
+    var meta = prop.MetaProperties || {},
+        ph = {};
+    ph.dataSource = prop.dataSource || prop.LayerID;
+
+    if ('parentLayer' in meta) {
+      // изменить dataSource через MetaProperties
+      ph.dataSource = meta.parentLayer.Value || '';
+    }
+
+    ['srs', // проекция слоя
+    'gmxProxy', // установка прокачивалки
+    'filter', // фильтр слоя
+    'isGeneralized', // флаг generalization
+    'isFlatten', // флаг flatten
+    'multiFilters', // проверка всех фильтров для обьектов слоя
+    'showScreenTiles', // показывать границы экранных тайлов
+    'dateBegin', // фильтр по дате начало периода
+    'dateEnd', // фильтр по дате окончание периода
+    'shiftX', // сдвиг всего слоя
+    'shiftY', // сдвиг всего слоя
+    'shiftXfield', // сдвиг растров объектов слоя
+    'shiftYfield', // сдвиг растров объектов слоя
+    'quicklookPlatform', // тип спутника
+    'quicklookX1', // точки привязки снимка
+    'quicklookY1', // точки привязки снимка
+    'quicklookX2', // точки привязки снимка
+    'quicklookY2', // точки привязки снимка
+    'quicklookX3', // точки привязки снимка
+    'quicklookY3', // точки привязки снимка
+    'quicklookX4', // точки привязки снимка
+    'quicklookY4' // точки привязки снимка
+    ].forEach(function (k) {
+      ph[k] = k in meta ? meta[k].Value : '';
+    });
+
+    if (ph.gmxProxy.toLowerCase() === 'true') {
+      // проверка прокачивалки
+      ph.gmxProxy = GMXPROXY;
+    }
+
+    if ('parentLayer' in meta) {
+      // фильтр слоя		// todo удалить после изменений вов вьювере
+      ph.dataSource = meta.parentLayer.Value || prop.dataSource || '';
+    }
+
+    return ph;
+  },
+  getTileAttributes: function getTileAttributes(prop) {
+    var tileAttributeIndexes = {},
+        tileAttributeTypes = {};
+
+    if (prop.attributes) {
+      var attrs = prop.attributes,
+          attrTypes = prop.attrTypes || null;
+
+      if (prop.identityField) {
+        tileAttributeIndexes[prop.identityField] = 0;
+      }
+
+      for (var a = 0; a < attrs.length; a++) {
+        var key = attrs[a];
+        tileAttributeIndexes[key] = a + 1;
+        tileAttributeTypes[key] = attrTypes ? attrTypes[a] : 'string';
+      }
+    }
+
+    return {
+      tileAttributeTypes: tileAttributeTypes,
+      tileAttributeIndexes: tileAttributeIndexes
+    };
   }
 }; // const COMPARS = {WrapStyle: 'None', ftc: 'osm', srs: 3857};
 // const chkSignal = (signalName, signals, opt) => {
@@ -710,7 +868,60 @@ var setDateInterval = function setDateInterval(pars) {
   console.log('setDateInterval:', pars, hosts);
 };
 
-var getMapTree$1 = function getMapTree(pars) {
+var _iterateNodeChilds = function _iterateNodeChilds(node, level, out) {
+  level = level || 0;
+  out = out || {
+    layers: []
+  };
+
+  if (node) {
+    var type = node.type,
+        content = node.content,
+        props = content.properties;
+
+    if (type === 'layer') {
+      var ph = utils$1.parseLayerProps(props);
+      ph.level = level;
+
+      if (content.geometry) {
+        ph.geometry = content.geometry;
+      }
+
+      out.layers.push(ph);
+    } else if (type === 'group') {
+      var childs = content.children || [];
+      out.layers.push({
+        level: level,
+        group: true,
+        childsLen: childs.length,
+        properties: props
+      });
+      childs.map(function (it) {
+        _iterateNodeChilds(it, level + 1, out);
+      });
+    }
+  } else {
+    return out;
+  }
+
+  return out;
+};
+
+var parseTree = function parseTree(json) {
+  var out = {};
+
+  if (json.Status === 'error') {
+    out = json;
+  } else if (json.Result && json.Result.content) {
+    out = _iterateNodeChilds(json.Result);
+    out.mapAttr = out.layers.shift();
+  } // console.log('______json_out_______', out, json)
+
+
+  return out;
+};
+
+var getMapTree = function getMapTree(pars) {
   pars = pars || {};
   var hostName = pars.hostName || HOST,
       host = hosts[hostName];
@@ -729,8 +940,6 @@ var getMapTree$1 = function getMapTree(pars) {
           visibleItemOnly: false
         }
       }).then(function (json) {
-        console.log('getMapTree:', hosts, json);
-
         if (!hosts[hostName]) {
           hosts[hostName] = {
             ids: {},
@@ -738,30 +947,26 @@ var getMapTree$1 = function getMapTree(pars) {
           };
         }
 
-        hosts[hostName].layerTree = json.res.Result;
+        console.log('getMapTree:', hosts, json);
         resolve(json);
+        hosts[hostName].layerTree = json.res.Result;
+        hosts[hostName].parseLayers = parseTree(json.res);
       });
     }
-  }); // DataVersion.getMapTree({mapID: message.mapID, hostName: message.hostName, search: message.search}).then((json) => {
-  // let host = hosts[pars.hostName];
-  // if (host && host.ids[pars.id]) {
-  // host.ids[pars.id].dateBegin = pars.dateBegin;
-  // host.ids[pars.id].dateEnd = pars.dateEnd;
-  // }
-  // utils.now();
+  });
 };
 
 var DataVersion = {
-  getMapTree: getMapTree$1,
+  getMapTree: getMapTree,
   setDateInterval: setDateInterval,
   moveend: moveend,
   removeSource: removeSource,
   addSource: addSource
 };
 
-var _self = self;
+var _self$1 = self;
 
-(_self.on || _self.addEventListener).call(_self, 'message', function (e) {
+(_self$1.on || _self$1.addEventListener).call(_self$1, 'message', function (e) {
   var message = e.data || e;
   console.log('message ', e);
 
@@ -777,7 +982,7 @@ var _self = self;
         });
         json.Result.fieldKeys = pt;
 
-        _self.postMessage(message);
+        _self$1.postMessage(message);
       });
       break;
 
@@ -790,7 +995,7 @@ var _self = self;
         // Requests.getMapTree({mapID: message.mapID, hostName: message.hostName, search: message.search}).then((json) => {
         message.out = json;
 
-        _self.postMessage(message);
+        _self$1.postMessage(message);
       });
       break;
 
@@ -801,7 +1006,7 @@ var _self = self;
     case 'getSyncParams':
       message.syncParams = Requests.getSyncParams(message.stringFlag);
 
-      _self.postMessage(message);
+      _self$1.postMessage(message);
 
       break;
 

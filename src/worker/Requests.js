@@ -1,13 +1,13 @@
 
-const	_self = self || window,
+const	_self = self || window;
 		// serverBase = _self.serverBase || 'maps.kosmosnimki.ru/',
 		// serverProxy = serverBase + 'Plugins/ForestReport/proxy',
-		gmxProxy = '//maps.kosmosnimki.ru/ApiSave.ashx';
+		// gmxProxy = '//maps.kosmosnimki.ru/ApiSave.ashx';
 
 // let _app = {},
 	// loaderStatus = {},
 	// _sessionKeys = {},
-let str = self.location.origin || '',
+let str = _self.location.origin || '',
 	_protocol = str.substring(0, str.indexOf('/')),
 	syncParams = {},
 	fetchOptions = {
@@ -171,81 +171,6 @@ let utils = {
 			// handler.workerContext.postMessage(out);
 		});
     },
-    parseLayerProps: function(prop) {
-		// let ph = utils.getTileAttributes(prop);
-		return utils.extend(
-			{
-				properties: prop
-			},
-			utils.getTileAttributes(prop),
-			utils.parseMetaProps(prop)
-		);
-		
-		
-		// return ph;
-    },
-
-    parseMetaProps: function(prop) {
-        var meta = prop.MetaProperties || {},
-            ph = {};
-        ph.dataSource = prop.dataSource || prop.LayerID;
-		if ('parentLayer' in meta) {								// изменить dataSource через MetaProperties
-			ph.dataSource = meta.parentLayer.Value || '';
-		}
-		[
-			'srs',					// проекция слоя
-			'gmxProxy',				// установка прокачивалки
-			'filter',				// фильтр слоя
-			'isGeneralized',		// флаг generalization
-			'isFlatten',			// флаг flatten
-			'multiFilters',			// проверка всех фильтров для обьектов слоя
-			'showScreenTiles',		// показывать границы экранных тайлов
-			'dateBegin',			// фильтр по дате начало периода
-			'dateEnd',				// фильтр по дате окончание периода
-			'shiftX',				// сдвиг всего слоя
-			'shiftY',				// сдвиг всего слоя
-			'shiftXfield',			// сдвиг растров объектов слоя
-			'shiftYfield',			// сдвиг растров объектов слоя
-			'quicklookPlatform',	// тип спутника
-			'quicklookX1',			// точки привязки снимка
-			'quicklookY1',			// точки привязки снимка
-			'quicklookX2',			// точки привязки снимка
-			'quicklookY2',			// точки привязки снимка
-			'quicklookX3',			// точки привязки снимка
-			'quicklookY3',			// точки привязки снимка
-			'quicklookX4',			// точки привязки снимка
-			'quicklookY4'			// точки привязки снимка
-		].forEach((k) => {
-			ph[k] = k in meta ? meta[k].Value : '';
-		});
-		if (ph.gmxProxy.toLowerCase() === 'true') {    // проверка прокачивалки
-			ph.gmxProxy = gmxProxy;
-		}
-		if ('parentLayer' in meta) {  // фильтр слоя		// todo удалить после изменений вов вьювере
-			ph.dataSource = meta.parentLayer.Value || prop.dataSource || '';
-		}
-
-        return ph;
-    },
-
-    getTileAttributes: function(prop) {
-        var tileAttributeIndexes = {},
-            tileAttributeTypes = {};
-        if (prop.attributes) {
-            var attrs = prop.attributes,
-                attrTypes = prop.attrTypes || null;
-            if (prop.identityField) { tileAttributeIndexes[prop.identityField] = 0; }
-            for (var a = 0; a < attrs.length; a++) {
-                var key = attrs[a];
-                tileAttributeIndexes[key] = a + 1;
-                tileAttributeTypes[key] = attrTypes ? attrTypes[a] : 'string';
-            }
-        }
-        return {
-            tileAttributeTypes: tileAttributeTypes,
-            tileAttributeIndexes: tileAttributeIndexes
-        };
-    }
 };
 /*
 const requestSessionKey = (serverHost, apiKey) => {
@@ -357,7 +282,6 @@ console.log('removeDataSource:', pars);
 	//Requests.removeDataSource({id: message.layerID, hostName: message.hostName}).then((json) => {
 	return;
 };
-*/
 let _maps = {};
 const getMapTree = (pars) => {
 	pars = pars || {};
@@ -423,7 +347,7 @@ const parseTree = (json) => {
 // console.log('______json_out_______', out, json)
 	return out;
 };
-
+*/
 
 const chkSignal = (signalName, signals, opt) => {
 	opt = opt || {};
@@ -443,7 +367,8 @@ export default {
 	setSyncParams,
 	getSyncParams,
 	parseURLParams,
-	getMapTree,
+	// getMapTree,
+	extend: utils.extend,
 	getFormBody: utils.getFormBody,
 	getTileJson: utils.getTileJson,
 	getJson: utils.getJson
