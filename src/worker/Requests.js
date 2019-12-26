@@ -1,6 +1,6 @@
 
 const	_self = self || window,
-		serverBase = _self.serverBase || 'maps.kosmosnimki.ru/',
+		// serverBase = _self.serverBase || 'maps.kosmosnimki.ru/',
 		// serverProxy = serverBase + 'Plugins/ForestReport/proxy',
 		gmxProxy = '//maps.kosmosnimki.ru/ApiSave.ashx';
 
@@ -14,7 +14,7 @@ let str = self.location.origin || '',
 		// method: 'post',
 		// headers: {'Content-type': 'application/x-www-form-urlencoded'},
 		mode: 'cors',
-		redirect: 'follow',
+		// redirect: 'follow',
 		credentials: 'include'
 	};
 
@@ -130,9 +130,21 @@ let utils = {
 		}
 		return resp.text();
 	},
-	// getJson: function(url, params, options) {
+	getTileJson: function(queue) {
+		let params = queue.params || {};
+		if (queue.paramsArr) {
+			queue.paramsArr.forEach((it) => {
+				params = utils.extend(params, it);
+			});
+		}
+		let par = utils.extend({}, fetchOptions, COMPARS, params, syncParams),
+			options = queue.options || {};
+		return fetch(queue.url + '?' + utils.getFormBody(par))
+		.then(function(res) {
+			return utils.chkResponse(res, options.type);
+		});
+	},
 	getJson: function(queue) {
-// log('getJson', _protocol, queue, Date.now())
 		let params = queue.params || {};
 		if (queue.paramsArr) {
 			queue.paramsArr.forEach((it) => {
@@ -144,9 +156,6 @@ let utils = {
 			opt = utils.extend({
 				method: 'post',
 				headers: {'Content-type': 'application/x-www-form-urlencoded'}
-				// mode: 'cors',
-				// redirect: 'follow',
-				// credentials: 'include'
 			}, fetchOptions, options, {
 				body: utils.getFormBody(par)
 			});
@@ -155,12 +164,7 @@ let utils = {
 			return utils.chkResponse(res, options.type);
 		})
 		.then(function(res) {
-			var out = {url: queue.url, queue: queue, load: true, res: res};
-			// if (queue.send) {
-				// handler.workerContext.postMessage(out);
-			// } else {
-				return out;
-			// }
+			return {url: queue.url, queue: queue, load: true, res: res};
 		})
 		.catch(function(err) {
 			return {url: queue.url, queue: queue, load: false, error: err.toString()};
@@ -357,8 +361,8 @@ console.log('removeDataSource:', pars);
 let _maps = {};
 const getMapTree = (pars) => {
 	pars = pars || {};
-	let hostName = pars.hostName || serverBase,
-		id = pars.mapId;
+	let hostName = pars.hostName || 'maps.kosmosnimki.ru',
+		id = pars.mapID;
 	return utils.getJson({
 		url: '//' + hostName + '/Map/GetMapFolder',
 		// options: {},
@@ -371,12 +375,12 @@ const getMapTree = (pars) => {
 			visibleItemOnly: false
 		}
 	})
-		.then(function(json) {
-			let out = parseTree(json.res);
-			_maps[hostName] = _maps[hostName] || {};
-			_maps[hostName][id] = out;
-			return parseTree(out);
-		});
+		// .then(function(json) {
+			// let out = parseTree(json.res);
+			// _maps[hostName] = _maps[hostName] || {};
+			// _maps[hostName][id] = out;
+			// return parseTree(out);
+		// });
 };
 
 const _iterateNodeChilds = (node, level, out) => {
@@ -424,7 +428,7 @@ const parseTree = (json) => {
 const chkSignal = (signalName, signals, opt) => {
 	opt = opt || {};
 	let sObj = signals[signalName];
-	
+// console.log('sssssss', sObj, signalName)
 	if (sObj) { sObj.abort(); }
 	sObj = signals[signalName] = new AbortController();
 	sObj.signal.addEventListener('abort', (ev) => console.log('Отмена fetch:', ev));
@@ -440,6 +444,8 @@ export default {
 	getSyncParams,
 	parseURLParams,
 	getMapTree,
+	getFormBody: utils.getFormBody,
+	getTileJson: utils.getTileJson,
 	getJson: utils.getJson
 	// addDataSource,
 	// removeDataSource,

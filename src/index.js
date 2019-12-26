@@ -82,9 +82,27 @@ const Utils = {
 			dataWorker.postMessage({cmd: 'getSyncParams', stringFlag: stringFlag});
 		});
 	},
+	setDateInterval: (dateInterval, id, hostName) => {
+		console.log('setDateInterval', dateInterval, id, hostName)
+
+		return new Promise((resolve) => {
+			dataWorker.onmessage = (res) => {
+				if (res.data.cmd === 'setDateInterval') { resolve(res.data); }
+			};
+			dataWorker.postMessage({
+				cmd: 'setDateInterval',
+				id: id,
+				hostName: hostName || 'maps.kosmosnimki.ru',
+				dateBegin: Math.floor(dateInterval.beginDate.getTime() / 1000),
+				dateEnd: Math.floor(dateInterval.endDate.getTime() / 1000)
+			});
+		});
+	},
 	getMap: (opt) => {
 		opt = opt || {};
         return new Promise((resolve) => {
+			let mapID = urlPars.main.length ? urlPars.main[0] : opt.mapID;
+			// let mapID = urlPars.main.length ? urlPars.main[0] : opt.mapID, hostName: opt.hostName, search: location.search});
 
 			dataWorker.onmessage = (res) => {
 				let data = res.data,
@@ -96,10 +114,12 @@ const Utils = {
 				}
 		// console.log('onmessage', json);
 			};
-			dataWorker.postMessage({cmd: 'getMap', mapID: urlPars.main.length ? urlPars.main[0] : opt.mapID, hostName: opt.hostName, search: location.search});
+			dataWorker.postMessage({
+				cmd: 'getMap',
+				mapID: mapID
+			});
 		});
 	}
-
 };
 
 L.Map.addInitHook(function () {
@@ -107,21 +127,27 @@ L.Map.addInitHook(function () {
 	map
 		.on('layeradd', (ev) => {
 			if (ev.layer._gmx) {
-				let _gmx = ev.layer._gmx,
-					dm = ev.layer.getDataManager(),
-					// opt = dm.options,
+				let layer = ev.layer,
+					// gmxProps = layer.getGmxProperties(),
+					_gmx = layer._gmx,
+					dm = layer.getDataManager(),
+					opt = dm.options,
+					id = opt.name,
+					hostName = opt.hostName,
 					dtInterval = dm.getMaxDateInterval(),
 					beginDate = dtInterval.beginDate || _gmx.beginDate,
 					endDate = dtInterval.endDate || _gmx.endDate,
 					pars = {
 						cmd: 'addDataSource',
-						id: _gmx.layerID,
+						id: id,
+						// id: _gmx.layerID,
 						// v: opt.LayerVersion,
-						hostName: _gmx.hostName,
+						// gmxStyles: gmxProps.gmxStyles,
+						hostName: hostName,
 						bbox: Utils.getBboxes(map),
 						zoom: map.getZoom()
 					};
-				if (window.apiKey && pars.hostName === 'maps.kosmosnimki.ru') {
+				if (window.apiKey && hostName === 'maps.kosmosnimki.ru') {
 					pars.apiKey = window.apiKey;
 				}
 				if (beginDate) {
@@ -147,6 +173,10 @@ L.Map.addInitHook(function () {
 							}
 						};
 						dataWorker.postMessage(pars);
+						dm.on('onDateInterval', (ev) => {
+							Utils.setDateInterval({beginDate: ev.beginDate, endDate: ev.endDate}, id, hostName);
+						});
+
 					} else {
 						resolve({error: 'Not Geomixer layer'});
 					}
@@ -161,7 +191,7 @@ L.Map.addInitHook(function () {
 			});
 		})
 		.on('layerremove', (ev) => {
-	console.log('layerremove', ev);
+	// console.log('layerremove', ev);
 			let it = ev.layer,
 				_gmx = it._gmx;
 

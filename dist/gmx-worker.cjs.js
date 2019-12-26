@@ -27,9 +27,7 @@ function createURLWorkerFactory(url) {
 var WorkerFactory = createURLWorkerFactory('geomixer/external/gmx.worker/dist/web-worker-0.js');
 /* eslint-enable */
 
-var _self = self || window,
-    serverBase = _self.serverBase || 'maps.kosmosnimki.ru/',
-    // serverProxy = serverBase + 'Plugins/ForestReport/proxy',
+var // serverProxy = serverBase + 'Plugins/ForestReport/proxy',
 gmxProxy = '//maps.kosmosnimki.ru/ApiSave.ashx'; // let _app = {},
 // loaderStatus = {},
 // _sessionKeys = {},
@@ -42,7 +40,7 @@ var str = self.location.origin || '',
   // method: 'post',
   // headers: {'Content-type': 'application/x-www-form-urlencoded'},
   mode: 'cors',
-  redirect: 'follow',
+  // redirect: 'follow',
   credentials: 'include'
 };
 
@@ -219,9 +217,22 @@ var utils = {
 
     return resp.text();
   },
-  // getJson: function(url, params, options) {
+  getTileJson: function getTileJson(queue) {
+    var params = queue.params || {};
+
+    if (queue.paramsArr) {
+      queue.paramsArr.forEach(function (it) {
+        params = utils.extend(params, it);
+      });
+    }
+
+    var par = utils.extend({}, fetchOptions, COMPARS, params, syncParams),
+        options = queue.options || {};
+    return fetch(queue.url + '?' + utils.getFormBody(par)).then(function (res) {
+      return utils.chkResponse(res, options.type);
+    });
+  },
   getJson: function getJson(queue) {
-    // log('getJson', _protocol, queue, Date.now())
     var params = queue.params || {};
 
     if (queue.paramsArr) {
@@ -236,26 +247,19 @@ var utils = {
       method: 'post',
       headers: {
         'Content-type': 'application/x-www-form-urlencoded'
-      } // mode: 'cors',
-      // redirect: 'follow',
-      // credentials: 'include'
-
+      }
     }, fetchOptions, options, {
       body: utils.getFormBody(par)
     });
     return fetch(utils.chkProtocol(queue.url), opt).then(function (res) {
       return utils.chkResponse(res, options.type);
     }).then(function (res) {
-      var out = {
+      return {
         url: queue.url,
         queue: queue,
         load: true,
         res: res
-      }; // if (queue.send) {
-      // handler.workerContext.postMessage(out);
-      // } else {
-
-      return out; // }
+      };
     }).catch(function (err) {
       return {
         url: queue.url,
@@ -344,124 +348,11 @@ var utils = {
     };
   }
 };
-/*
-const requestSessionKey = (serverHost, apiKey) => {
-	let keys = _sessionKeys;
-	if (!(serverHost in keys)) {
-		keys[serverHost] = new Promise(function(resolve, reject) {
-			if (apiKey) {
-				utils.getJson({
-					url: '//' + serverHost + '/ApiKey.ashx',
-					params: {WrapStyle: 'None', Key: apiKey}
-				})
-					.then(function(json) {
-						let res = json.res;
-						if (res.Status === 'ok' && res.Result) {
-							resolve(res.Result.Key !== 'null' ? '' : res.Result.Key);
-						} else {
-							reject(json);
-						}
-					})
-					.catch(function() {
-						resolve('');
-					});
-			} else {
-				resolve('');
-			}
-		});
-	}
-	return keys[serverHost];
-};
-let _maps = {};
-const getMapTree = (pars) => {
-	pars = pars || {};
-	let hostName = pars.hostName || serverBase,
-		id = pars.mapId;
-	return utils.getJson({
-		url: '//' + hostName + '/Map/GetMapFolder',
-		// options: {},
-		params: {
-			srs: 3857, 
-			skipTiles: 'All',
-
-			mapId: id,
-			folderId: 'root',
-			visibleItemOnly: false
-		}
-	})
-		.then(function(json) {
-			let out = parseTree(json.res);
-			_maps[hostName] = _maps[hostName] || {};
-			_maps[hostName][id] = out;
-			return parseTree(out);
-		});
-};
-const getReq = url => {
-	return fetch(url, {
-			method: 'get',
-			mode: 'cors',
-			credentials: 'include'
-		// headers: {'Accept': 'application/json'},
-		// body: JSON.stringify(params)	// TODO: сервер почему то не хочет работать так https://googlechrome.github.io/samples/fetch-api/fetch-post.html
-		})
-		.then(res => res.json())
-		.catch(err => console.warn(err));
-};
-
-// const getLayerItems = (params) => {
-	// params = params || {};
-
-	// let url = `${serverBase}VectorLayer/Search.ashx`;
-	// url += '?layer=' + params.layerID;
-	// if (params.id) { '&query=gmx_id=' + params.id; }
-
-	// url += '&out_cs=EPSG:4326';
-	// url += '&geometry=true';
-	// return getReq(url);
-// };
-// const getReportsCount = () => {
-	// return getReq(serverProxy + '?path=/rest/v1/get-current-user-info');
-// };
-
-let dataSources = {},
-	loaderStatus1 = {};
-
-const addDataSource = (pars) => {
-	pars = pars || {};
-
-	let id = pars.id;
-	if (id) {
-		let hostName = pars.hostName;
-		
-	} else {
-		console.warn('Warning: Specify layer \'id\' and \'hostName\`', pars);
-	}
-console.log('addDataSource:', pars);
-	return;
-};
-
-const removeDataSource = (pars) => {
-	pars = pars || {};
-
-	let id = pars.id;
-	if (id) {
-		let hostName = pars.hostName;
-		
-	} else {
-		console.warn('Warning: Specify layer \'id\' and \'hostName\`', pars);
-	}
-console.log('removeDataSource:', pars);
-	//Requests.removeDataSource({id: message.layerID, hostName: message.hostName}).then((json) => {
-	return;
-};
-*/
-
-var _maps = {};
 
 var getMapTree = function getMapTree(pars) {
   pars = pars || {};
-  var hostName = pars.hostName || serverBase,
-      id = pars.mapId;
+  var hostName = pars.hostName || 'maps.kosmosnimki.ru',
+      id = pars.mapID;
   return utils.getJson({
     url: '//' + hostName + '/Map/GetMapFolder',
     // options: {},
@@ -472,70 +363,17 @@ var getMapTree = function getMapTree(pars) {
       folderId: 'root',
       visibleItemOnly: false
     }
-  }).then(function (json) {
-    var out = parseTree(json.res);
-    _maps[hostName] = _maps[hostName] || {};
-    _maps[hostName][id] = out;
-    return parseTree(out);
-  });
-};
-
-var _iterateNodeChilds = function _iterateNodeChilds(node, level, out) {
-  level = level || 0;
-  out = out || {
-    layers: []
-  };
-
-  if (node) {
-    var type = node.type,
-        content = node.content,
-        props = content.properties;
-
-    if (type === 'layer') {
-      var ph = utils.parseLayerProps(props);
-      ph.level = level;
-
-      if (content.geometry) {
-        ph.geometry = content.geometry;
-      }
-
-      out.layers.push(ph);
-    } else if (type === 'group') {
-      var childs = content.children || [];
-      out.layers.push({
-        level: level,
-        group: true,
-        childsLen: childs.length,
-        properties: props
-      });
-      childs.map(function (it) {
-        _iterateNodeChilds(it, level + 1, out);
-      });
-    }
-  } else {
-    return out;
-  }
-
-  return out;
-};
-
-var parseTree = function parseTree(json) {
-  var out = {};
-
-  if (json.Status === 'error') {
-    out = json;
-  } else if (json.Result && json.Result.content) {
-    out = _iterateNodeChilds(json.Result);
-    out.mapAttr = out.layers.shift();
-  } // console.log('______json_out_______', out, json)
-
-
-  return out;
+  }); // .then(function(json) {
+  // let out = parseTree(json.res);
+  // _maps[hostName] = _maps[hostName] || {};
+  // _maps[hostName][id] = out;
+  // return parseTree(out);
+  // });
 };
 
 var chkSignal = function chkSignal(signalName, signals, opt) {
   opt = opt || {};
-  var sObj = signals[signalName];
+  var sObj = signals[signalName]; // console.log('sssssss', sObj, signalName)
 
   if (sObj) {
     sObj.abort();
@@ -557,6 +395,8 @@ var Requests = {
   getSyncParams: getSyncParams,
   parseURLParams: parseURLParams,
   getMapTree: getMapTree,
+  getFormBody: utils.getFormBody,
+  getTileJson: utils.getTileJson,
   getJson: utils.getJson // addDataSource,
   // removeDataSource,
   // getReportsCount,
@@ -662,9 +502,29 @@ var Utils = {
       });
     });
   },
+  setDateInterval: function setDateInterval(dateInterval, id, hostName) {
+    console.log('setDateInterval', dateInterval, id, hostName);
+    return new Promise(function (resolve) {
+      dataWorker.onmessage = function (res) {
+        if (res.data.cmd === 'setDateInterval') {
+          resolve(res.data);
+        }
+      };
+
+      dataWorker.postMessage({
+        cmd: 'setDateInterval',
+        id: id,
+        hostName: hostName || 'maps.kosmosnimki.ru',
+        dateBegin: Math.floor(dateInterval.beginDate.getTime() / 1000),
+        dateEnd: Math.floor(dateInterval.endDate.getTime() / 1000)
+      });
+    });
+  },
   getMap: function getMap(opt) {
     opt = opt || {};
     return new Promise(function (resolve) {
+      var mapID = urlPars.main.length ? urlPars.main[0] : opt.mapID; // let mapID = urlPars.main.length ? urlPars.main[0] : opt.mapID, hostName: opt.hostName, search: location.search});
+
       dataWorker.onmessage = function (res) {
         var data = res.data,
             cmd = data.cmd,
@@ -678,9 +538,7 @@ var Utils = {
 
       dataWorker.postMessage({
         cmd: 'getMap',
-        mapID: urlPars.main.length ? urlPars.main[0] : opt.mapID,
-        hostName: opt.hostName,
-        search: location.search
+        mapID: mapID
       });
     });
   }
@@ -689,22 +547,28 @@ L.Map.addInitHook(function () {
   var map = this;
   map.on('layeradd', function (ev) {
     if (ev.layer._gmx) {
-      var _gmx = ev.layer._gmx,
-          dm = ev.layer.getDataManager(),
-          // opt = dm.options,
-      dtInterval = dm.getMaxDateInterval(),
+      var layer = ev.layer,
+          // gmxProps = layer.getGmxProperties(),
+      _gmx = layer._gmx,
+          dm = layer.getDataManager(),
+          opt = dm.options,
+          id = opt.name,
+          hostName = opt.hostName,
+          dtInterval = dm.getMaxDateInterval(),
           beginDate = dtInterval.beginDate || _gmx.beginDate,
           endDate = dtInterval.endDate || _gmx.endDate,
           pars = {
         cmd: 'addDataSource',
-        id: _gmx.layerID,
+        id: id,
+        // id: _gmx.layerID,
         // v: opt.LayerVersion,
-        hostName: _gmx.hostName,
+        // gmxStyles: gmxProps.gmxStyles,
+        hostName: hostName,
         bbox: Utils.getBboxes(map),
         zoom: map.getZoom()
       };
 
-      if (window.apiKey && pars.hostName === 'maps.kosmosnimki.ru') {
+      if (window.apiKey && hostName === 'maps.kosmosnimki.ru') {
         pars.apiKey = window.apiKey;
       }
 
@@ -734,6 +598,12 @@ L.Map.addInitHook(function () {
           };
 
           dataWorker.postMessage(pars);
+          dm.on('onDateInterval', function (ev) {
+            Utils.setDateInterval({
+              beginDate: ev.beginDate,
+              endDate: ev.endDate
+            }, id, hostName);
+          });
         } else {
           resolve({
             error: 'Not Geomixer layer'
@@ -748,7 +618,7 @@ L.Map.addInitHook(function () {
       zoom: map.getZoom()
     });
   }).on('layerremove', function (ev) {
-    console.log('layerremove', ev);
+    // console.log('layerremove', ev);
     var it = ev.layer,
         _gmx = it._gmx;
     return new Promise(function (resolve) {

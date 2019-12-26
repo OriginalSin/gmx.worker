@@ -75,7 +75,7 @@ const chkHost = (hostName) => {
 		paramsArr: [Requests.COMPARS, {
 			layers: JSON.stringify(arr),
 			bboxes: JSON.stringify(bbox || [WORLDBBOX]),
-			generalizedTiles: false,
+			// generalizedTiles: false,
 			zoom: zoom
 		}]
 	}).then(json => {
@@ -88,13 +88,12 @@ const chkHost = (hostName) => {
 	});
 };
 const chkVersion = () => {
-	// console.log('chkVersion:', id, hosts);
-	for (let key in hosts) {
-		chkHost(key).then(json => {
+	for (let host in hosts) {
+		chkHost(host).then(json => {
 			if (json.error) {
 				console.warn('chkVersion:', json.error);
 			} else {
-				let hostLayers = hosts[key],
+				let hostLayers = hosts[host],
 					ids = hostLayers.ids,
 					res = json.res;
 				if (res.Status === 'ok' && res.Result) {
@@ -106,15 +105,24 @@ const chkVersion = () => {
 							pt.properties = props;
 							pt.geometry = it.geometry;
 						}
+						pt.hostName = host;
 						pt.tiles = it.tiles;
 						pt.tilesOrder = it.tilesOrder;
-						pt.tilePromises = TilesLoader.load(pt);
-				// console.log('chkVersion ___:', id, pt, v);
+						// pt.tilesPromise = 
+						TilesLoader.load(pt);
+						Promise.all(Object.values(pt.tilesPromise)).then((res) => {
+				console.log('tilesPromise ___:', hosts, res);
+						});
+
+						// pt.tilesPromise.then(res => {
+				// console.log('tilesPromise ___:', hosts, res);
+						// });
+				// console.log('chkVersion ___:', pt);
 					});
 					// resolve(res.Result.Key !== 'null' ? '' : res.Result.Key);
 				// } else {
 					// reject(json);
-					console.log('chkVersion key:', key, hosts);
+					// console.log('chkVersion key:', host, hosts);
 				}
 			}
 		});
@@ -167,6 +175,13 @@ const removeSource = (pars) => {
 	if (id) {
 		let hostName = pars.hostName || HOST;
 		if (hosts[hostName]) {
+			let pt = hosts[hostName].ids[id];
+console.log('signals:', pt.signals, pt);
+			if (pt.signals) {
+				Object.values(pt.signals).forEach((it) => {
+					it.abort();
+				});
+			}
 			delete hosts[hostName].ids[id];
 			if (Object.keys(hosts[hostName].ids).length === 0) { delete hosts[hostName]; }
 			if (Object.keys(hosts).length === 0) { utils.stop(); }
@@ -189,8 +204,59 @@ console.log('moveend:', pars);
 	utils.now();
 	return;
 };
+const setDateInterval = (pars) => {
+	pars = pars || {};
+	let host = hosts[pars.hostName];
+	if (host && host.ids[pars.id]) {
+		host.ids[pars.id].dateBegin = pars.dateBegin;
+		host.ids[pars.id].dateEnd = pars.dateEnd;
+	}
+	utils.now();
+
+console.log('setDateInterval:', pars, hosts);
+};
+
+const getMapTree = (pars) => {
+	pars = pars || {};
+	let hostName = pars.hostName || HOST,
+		host = hosts[hostName];
+
+	return new Promise((resolve) => {
+		if (host && host.layerTree) {
+			resolve(host.layerTree);
+		} else {
+			Requests.getJson({
+				url: '//' + hostName + '/Map/GetMapFolder',
+				// options: {},
+				params: {
+					srs: 3857, 
+					skipTiles: 'All',
+					mapId: pars.mapID,
+					folderId: 'root',
+					visibleItemOnly: false
+				}
+			}).then(json => {
+console.log('getMapTree:', hosts, json);
+				if (!hosts[hostName]) { hosts[hostName] = {ids: {}, signals: {}}; }
+				hosts[hostName].layerTree = json.res.Result;
+				resolve(json);
+			})
+		}
+	});
+			// DataVersion.getMapTree({mapID: message.mapID, hostName: message.hostName, search: message.search}).then((json) => {
+
+	// let host = hosts[pars.hostName];
+	// if (host && host.ids[pars.id]) {
+		// host.ids[pars.id].dateBegin = pars.dateBegin;
+		// host.ids[pars.id].dateEnd = pars.dateEnd;
+	// }
+	// utils.now();
+
+};
 
 export default {
+	getMapTree,
+	setDateInterval,
 	moveend,
 	removeSource,
 	addSource

@@ -1,6 +1,4 @@
-var _self = self || window,
-    serverBase = _self.serverBase || 'maps.kosmosnimki.ru/',
-    // serverProxy = serverBase + 'Plugins/ForestReport/proxy',
+var // serverProxy = serverBase + 'Plugins/ForestReport/proxy',
 gmxProxy = '//maps.kosmosnimki.ru/ApiSave.ashx'; // let _app = {},
 // loaderStatus = {},
 // _sessionKeys = {},
@@ -13,7 +11,7 @@ var str = self.location.origin || '',
   // method: 'post',
   // headers: {'Content-type': 'application/x-www-form-urlencoded'},
   mode: 'cors',
-  redirect: 'follow',
+  // redirect: 'follow',
   credentials: 'include'
 };
 
@@ -190,9 +188,22 @@ var utils = {
 
     return resp.text();
   },
-  // getJson: function(url, params, options) {
+  getTileJson: function getTileJson(queue) {
+    var params = queue.params || {};
+
+    if (queue.paramsArr) {
+      queue.paramsArr.forEach(function (it) {
+        params = utils.extend(params, it);
+      });
+    }
+
+    var par = utils.extend({}, fetchOptions, COMPARS, params, syncParams),
+        options = queue.options || {};
+    return fetch(queue.url + '?' + utils.getFormBody(par)).then(function (res) {
+      return utils.chkResponse(res, options.type);
+    });
+  },
   getJson: function getJson(queue) {
-    // log('getJson', _protocol, queue, Date.now())
     var params = queue.params || {};
 
     if (queue.paramsArr) {
@@ -207,26 +218,19 @@ var utils = {
       method: 'post',
       headers: {
         'Content-type': 'application/x-www-form-urlencoded'
-      } // mode: 'cors',
-      // redirect: 'follow',
-      // credentials: 'include'
-
+      }
     }, fetchOptions, options, {
       body: utils.getFormBody(par)
     });
     return fetch(utils.chkProtocol(queue.url), opt).then(function (res) {
       return utils.chkResponse(res, options.type);
     }).then(function (res) {
-      var out = {
+      return {
         url: queue.url,
         queue: queue,
         load: true,
         res: res
-      }; // if (queue.send) {
-      // handler.workerContext.postMessage(out);
-      // } else {
-
-      return out; // }
+      };
     }).catch(function (err) {
       return {
         url: queue.url,
@@ -315,124 +319,11 @@ var utils = {
     };
   }
 };
-/*
-const requestSessionKey = (serverHost, apiKey) => {
-	let keys = _sessionKeys;
-	if (!(serverHost in keys)) {
-		keys[serverHost] = new Promise(function(resolve, reject) {
-			if (apiKey) {
-				utils.getJson({
-					url: '//' + serverHost + '/ApiKey.ashx',
-					params: {WrapStyle: 'None', Key: apiKey}
-				})
-					.then(function(json) {
-						let res = json.res;
-						if (res.Status === 'ok' && res.Result) {
-							resolve(res.Result.Key !== 'null' ? '' : res.Result.Key);
-						} else {
-							reject(json);
-						}
-					})
-					.catch(function() {
-						resolve('');
-					});
-			} else {
-				resolve('');
-			}
-		});
-	}
-	return keys[serverHost];
-};
-let _maps = {};
-const getMapTree = (pars) => {
-	pars = pars || {};
-	let hostName = pars.hostName || serverBase,
-		id = pars.mapId;
-	return utils.getJson({
-		url: '//' + hostName + '/Map/GetMapFolder',
-		// options: {},
-		params: {
-			srs: 3857, 
-			skipTiles: 'All',
-
-			mapId: id,
-			folderId: 'root',
-			visibleItemOnly: false
-		}
-	})
-		.then(function(json) {
-			let out = parseTree(json.res);
-			_maps[hostName] = _maps[hostName] || {};
-			_maps[hostName][id] = out;
-			return parseTree(out);
-		});
-};
-const getReq = url => {
-	return fetch(url, {
-			method: 'get',
-			mode: 'cors',
-			credentials: 'include'
-		// headers: {'Accept': 'application/json'},
-		// body: JSON.stringify(params)	// TODO: сервер почему то не хочет работать так https://googlechrome.github.io/samples/fetch-api/fetch-post.html
-		})
-		.then(res => res.json())
-		.catch(err => console.warn(err));
-};
-
-// const getLayerItems = (params) => {
-	// params = params || {};
-
-	// let url = `${serverBase}VectorLayer/Search.ashx`;
-	// url += '?layer=' + params.layerID;
-	// if (params.id) { '&query=gmx_id=' + params.id; }
-
-	// url += '&out_cs=EPSG:4326';
-	// url += '&geometry=true';
-	// return getReq(url);
-// };
-// const getReportsCount = () => {
-	// return getReq(serverProxy + '?path=/rest/v1/get-current-user-info');
-// };
-
-let dataSources = {},
-	loaderStatus1 = {};
-
-const addDataSource = (pars) => {
-	pars = pars || {};
-
-	let id = pars.id;
-	if (id) {
-		let hostName = pars.hostName;
-		
-	} else {
-		console.warn('Warning: Specify layer \'id\' and \'hostName\`', pars);
-	}
-console.log('addDataSource:', pars);
-	return;
-};
-
-const removeDataSource = (pars) => {
-	pars = pars || {};
-
-	let id = pars.id;
-	if (id) {
-		let hostName = pars.hostName;
-		
-	} else {
-		console.warn('Warning: Specify layer \'id\' and \'hostName\`', pars);
-	}
-console.log('removeDataSource:', pars);
-	//Requests.removeDataSource({id: message.layerID, hostName: message.hostName}).then((json) => {
-	return;
-};
-*/
-
-var _maps = {};
 
 var getMapTree = function getMapTree(pars) {
   pars = pars || {};
-  var hostName = pars.hostName || serverBase,
-      id = pars.mapId;
+  var hostName = pars.hostName || 'maps.kosmosnimki.ru',
+      id = pars.mapID;
   return utils.getJson({
     url: '//' + hostName + '/Map/GetMapFolder',
     // options: {},
@@ -443,70 +334,17 @@ var getMapTree = function getMapTree(pars) {
       folderId: 'root',
       visibleItemOnly: false
     }
-  }).then(function (json) {
-    var out = parseTree(json.res);
-    _maps[hostName] = _maps[hostName] || {};
-    _maps[hostName][id] = out;
-    return parseTree(out);
-  });
-};
-
-var _iterateNodeChilds = function _iterateNodeChilds(node, level, out) {
-  level = level || 0;
-  out = out || {
-    layers: []
-  };
-
-  if (node) {
-    var type = node.type,
-        content = node.content,
-        props = content.properties;
-
-    if (type === 'layer') {
-      var ph = utils.parseLayerProps(props);
-      ph.level = level;
-
-      if (content.geometry) {
-        ph.geometry = content.geometry;
-      }
-
-      out.layers.push(ph);
-    } else if (type === 'group') {
-      var childs = content.children || [];
-      out.layers.push({
-        level: level,
-        group: true,
-        childsLen: childs.length,
-        properties: props
-      });
-      childs.map(function (it) {
-        _iterateNodeChilds(it, level + 1, out);
-      });
-    }
-  } else {
-    return out;
-  }
-
-  return out;
-};
-
-var parseTree = function parseTree(json) {
-  var out = {};
-
-  if (json.Status === 'error') {
-    out = json;
-  } else if (json.Result && json.Result.content) {
-    out = _iterateNodeChilds(json.Result);
-    out.mapAttr = out.layers.shift();
-  } // console.log('______json_out_______', out, json)
-
-
-  return out;
+  }); // .then(function(json) {
+  // let out = parseTree(json.res);
+  // _maps[hostName] = _maps[hostName] || {};
+  // _maps[hostName][id] = out;
+  // return parseTree(out);
+  // });
 };
 
 var chkSignal = function chkSignal(signalName, signals, opt) {
   opt = opt || {};
-  var sObj = signals[signalName];
+  var sObj = signals[signalName]; // console.log('sssssss', sObj, signalName)
 
   if (sObj) {
     sObj.abort();
@@ -528,6 +366,8 @@ var Requests = {
   getSyncParams: getSyncParams,
   parseURLParams: parseURLParams,
   getMapTree: getMapTree,
+  getFormBody: utils.getFormBody,
+  getTileJson: utils.getTileJson,
   getJson: utils.getJson // addDataSource,
   // removeDataSource,
   // getReportsCount,
@@ -535,45 +375,76 @@ var Requests = {
 
 };
 
+var TILE_PREFIX = 'gmxAPI._vectorTileReceiver(';
+
 var load = function load(pars) {
   pars = pars || {};
-  console.log('load:', pars);
 
   if (!pars.signals) {
     pars.signals = {};
   }
 
-  return new Promise(function (resolve, reject) {
-    var arr = [];
-    var pb = pars.tiles;
+  if (!pars.tilesPromise) {
+    pars.tilesPromise = {};
+  } // return new Promise((resolve) => {
 
-    for (var i = 0, len = pb.length; i < len; i += 6) {
-      arr.push(Requests.getJson({
+
+  var tilesOrder = pars.tilesOrder,
+      pb = pars.tiles,
+      tilesPromise = {};
+
+  var _loop = function _loop(i, len) {
+    var arr = pb.slice(i, i + tilesOrder.length),
+        tkey = arr.join('_'),
+        tHash = tilesOrder.reduce(function (p, c, j) {
+      p[c] = arr[j];
+      return p;
+    }, {});
+
+    if (pars.tilesPromise[tkey]) {
+      tilesPromise[tkey] = pars.tilesPromise[tkey];
+    } else {
+      // pars.tilesPromise[tkey] = Requests.getTileJson({
+      tilesPromise[tkey] = Requests.getTileJson({
         url: '//' + pars.hostName + '/TileSender.ashx',
-        options: Requests.chkSignal('TileLoader', pars.signals, {
-          mode: 'cors',
-          credentials: 'include'
-        }),
-        paramsArr: [Requests.COMPARS, {
-          z: pb[i],
-          x: pb[i + 1],
-          y: pb[i + 2],
-          v: pb[i + 3],
-          Level: pb[i + 4],
-          Span: pb[i + 5],
-          LayerName: pars.id // bboxes: JSON.stringify(bbox || [WORLDBBOX]),
-          // generalizedTiles: false,
-          // zoom: zoom
-
+        options: Requests.chkSignal(tkey, pars.signals),
+        paramsArr: [tHash, {
+          r: 'j',
+          ModeKey: 'tile',
+          LayerName: pars.id
         }]
       }).then(function (json) {
-        delete pars.signals.TileLoader;
+        delete pars.signals[tkey];
+
+        if (typeof json === 'string') {
+          if (json.substr(0, TILE_PREFIX.length) === TILE_PREFIX) {
+            json = json.replace(TILE_PREFIX, '');
+            json = JSON.parse(json.substr(0, json.length - 1));
+          }
+        }
+
         return json;
       }).catch(function (err) {
-        console.error(err); // resolve('');
-      }));
+        console.error(err);
+      });
+    }
+  };
+
+  for (var i = 0, len = pb.length; i < len; i += tilesOrder.length) {
+    _loop(i);
+  }
+
+  Object.keys(pars.signals).forEach(function (k) {
+    if (!tilesPromise[k]) {
+      pars.signals[k].abort();
+      delete pars.signals[k];
     }
   });
+  pars.tilesPromise = tilesPromise; // return out;
+  // Promise.all(arr).then((out) => {
+  // resolve(out);
+  // });
+  // });
 };
 
 var TilesLoader = {
@@ -663,7 +534,7 @@ var chkHost = function chkHost(hostName) {
     paramsArr: [Requests.COMPARS, {
       layers: JSON.stringify(arr),
       bboxes: JSON.stringify(bbox || [WORLDBBOX]),
-      generalizedTiles: false,
+      // generalizedTiles: false,
       zoom: zoom
     }]
   }).then(function (json) {
@@ -675,12 +546,12 @@ var chkHost = function chkHost(hostName) {
 };
 
 var chkVersion = function chkVersion() {
-  var _loop = function _loop(key) {
-    chkHost(key).then(function (json) {
+  var _loop = function _loop(host) {
+    chkHost(host).then(function (json) {
       if (json.error) {
         console.warn('chkVersion:', json.error);
       } else {
-        var hostLayers = hosts[key],
+        var hostLayers = hosts[host],
             ids = hostLayers.ids,
             res = json.res;
 
@@ -695,22 +566,28 @@ var chkVersion = function chkVersion() {
               pt.geometry = it.geometry;
             }
 
+            pt.hostName = host;
             pt.tiles = it.tiles;
-            pt.tilesOrder = it.tilesOrder;
-            pt.tilePromises = TilesLoader.load(pt); // console.log('chkVersion ___:', id, pt, v);
+            pt.tilesOrder = it.tilesOrder; // pt.tilesPromise = 
+
+            TilesLoader.load(pt);
+            Promise.all(Object.values(pt.tilesPromise)).then(function (res) {
+              console.log('tilesPromise ___:', hosts, res);
+            }); // pt.tilesPromise.then(res => {
+            // console.log('tilesPromise ___:', hosts, res);
+            // });
+            // console.log('chkVersion ___:', pt);
           }); // resolve(res.Result.Key !== 'null' ? '' : res.Result.Key);
           // } else {
           // reject(json);
-
-          console.log('chkVersion key:', key, hosts);
+          // console.log('chkVersion key:', host, hosts);
         }
       }
     });
   };
 
-  // console.log('chkVersion:', id, hosts);
-  for (var key in hosts) {
-    _loop(key);
+  for (var host in hosts) {
+    _loop(host);
   }
 };
 
@@ -776,6 +653,15 @@ var removeSource = function removeSource(pars) {
     var hostName = pars.hostName || HOST;
 
     if (hosts[hostName]) {
+      var pt = hosts[hostName].ids[id];
+      console.log('signals:', pt.signals, pt);
+
+      if (pt.signals) {
+        Object.values(pt.signals).forEach(function (it) {
+          it.abort();
+        });
+      }
+
       delete hosts[hostName].ids[id];
 
       if (Object.keys(hosts[hostName].ids).length === 0) {
@@ -811,16 +697,73 @@ var moveend = function moveend(pars) {
   return;
 };
 
+var setDateInterval = function setDateInterval(pars) {
+  pars = pars || {};
+  var host = hosts[pars.hostName];
+
+  if (host && host.ids[pars.id]) {
+    host.ids[pars.id].dateBegin = pars.dateBegin;
+    host.ids[pars.id].dateEnd = pars.dateEnd;
+  }
+
+  utils$1.now();
+  console.log('setDateInterval:', pars, hosts);
+};
+
+var getMapTree$1 = function getMapTree(pars) {
+  pars = pars || {};
+  var hostName = pars.hostName || HOST,
+      host = hosts[hostName];
+  return new Promise(function (resolve) {
+    if (host && host.layerTree) {
+      resolve(host.layerTree);
+    } else {
+      Requests.getJson({
+        url: '//' + hostName + '/Map/GetMapFolder',
+        // options: {},
+        params: {
+          srs: 3857,
+          skipTiles: 'All',
+          mapId: pars.mapID,
+          folderId: 'root',
+          visibleItemOnly: false
+        }
+      }).then(function (json) {
+        console.log('getMapTree:', hosts, json);
+
+        if (!hosts[hostName]) {
+          hosts[hostName] = {
+            ids: {},
+            signals: {}
+          };
+        }
+
+        hosts[hostName].layerTree = json.res.Result;
+        resolve(json);
+      });
+    }
+  }); // DataVersion.getMapTree({mapID: message.mapID, hostName: message.hostName, search: message.search}).then((json) => {
+  // let host = hosts[pars.hostName];
+  // if (host && host.ids[pars.id]) {
+  // host.ids[pars.id].dateBegin = pars.dateBegin;
+  // host.ids[pars.id].dateEnd = pars.dateEnd;
+  // }
+  // utils.now();
+};
+
 var DataVersion = {
+  getMapTree: getMapTree$1,
+  setDateInterval: setDateInterval,
   moveend: moveend,
   removeSource: removeSource,
   addSource: addSource
 };
 
-var _self$1 = self;
+var _self = self;
 
-(_self$1.on || _self$1.addEventListener).call(_self$1, 'message', function (e) {
-  var message = e.data || e; // console.log('message ', e);
+(_self.on || _self.addEventListener).call(_self, 'message', function (e) {
+  var message = e.data || e;
+  console.log('message ', e);
 
   switch (message.cmd) {
     case 'getLayerItems':
@@ -834,19 +777,20 @@ var _self$1 = self;
         });
         json.Result.fieldKeys = pt;
 
-        _self$1.postMessage(message);
+        _self.postMessage(message);
       });
       break;
 
     case 'getMap':
-      Requests.getMapTree({
-        mapId: message.mapID,
+      DataVersion.getMapTree({
+        mapID: message.mapID,
         hostName: message.hostName,
         search: message.search
       }).then(function (json) {
+        // Requests.getMapTree({mapID: message.mapID, hostName: message.hostName, search: message.search}).then((json) => {
         message.out = json;
 
-        _self$1.postMessage(message);
+        _self.postMessage(message);
       });
       break;
 
@@ -857,7 +801,7 @@ var _self$1 = self;
     case 'getSyncParams':
       message.syncParams = Requests.getSyncParams(message.stringFlag);
 
-      _self$1.postMessage(message);
+      _self.postMessage(message);
 
       break;
 
@@ -874,6 +818,10 @@ var _self$1 = self;
         id: message.id,
         hostName: message.hostName
       });
+      break;
+
+    case 'setDateInterval':
+      DataVersion.setDateInterval(message);
       break;
 
     case 'moveend':

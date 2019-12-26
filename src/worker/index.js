@@ -4,7 +4,7 @@ import DataVersion from './DataSourceVersion';
 var _self = self;
 (_self.on || _self.addEventListener).call(_self, 'message', e => {
     const message = e.data || e;
-// console.log('message ', e);
+console.log('message ', e);
     switch (message.cmd) {
 		case 'getLayerItems':
 			Requests.getLayerItems({layerID: message.layerID}).then((json) => {
@@ -16,7 +16,8 @@ var _self = self;
 			});
 			break;
 		case 'getMap':
-			Requests.getMapTree({mapId: message.mapID, hostName: message.hostName, search: message.search}).then((json) => {
+			DataVersion.getMapTree({mapID: message.mapID, hostName: message.hostName, search: message.search}).then((json) => {
+			// Requests.getMapTree({mapID: message.mapID, hostName: message.hostName, search: message.search}).then((json) => {
 				message.out = json;
 				_self.postMessage(message);
 			});
@@ -37,6 +38,9 @@ var _self = self;
 			break;
 		case 'removeDataSource':
 			DataVersion.removeSource({id: message.id, hostName: message.hostName});
+			break;
+		case 'setDateInterval':
+			DataVersion.setDateInterval(message);
 			break;
 		case 'moveend':
 			DataVersion.moveend(message);

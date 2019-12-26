@@ -1,58 +1,60 @@
 import Requests from './Requests';
 
-const HOST = 'maps.kosmosnimki.ru',
-        // this.tileSenderPrefix = L.gmxUtil.protocol + '//' + hostName + '/' +
-            // 'TileSender.ashx?WrapStyle=None' +
-            // '&key=' + encodeURIComponent(sessionKey);
-
-    WORLDWIDTHFULL = 40075016.685578496,
-	W = WORLDWIDTHFULL / 2,
-	WORLDBBOX = [[-W, -W, W, W]],
-    SCRIPT = '/Layer/CheckVersion.ashx';
-
-let hosts = {},
-    zoom = 3,
-    bbox = null,
-	// dataManagersLinks = {},
-    // hostBusy = {},
-    // needReq = {}
-    delay = 60000,
-	intervalID = null,
-    timeoutID = null;
+const TILE_PREFIX = 'gmxAPI._vectorTileReceiver(';
 
 const load = (pars) => {
 	pars = pars || {};
-console.log('load:', pars);
 	if (!pars.signals) { pars.signals = {}; }
-	return new Promise((resolve, reject) => {
-		let arr = [];
-		let pb = pars.tiles;
-		for (let i = 0, len = pb.length; i < len; i+=6) {
-			arr.push(Requests.getJson({
-				url: '//' + pars.hostName + '/TileSender.ashx',
-				options: Requests.chkSignal('TileLoader', pars.signals, {
-					mode: 'cors',
-					credentials: 'include'
-				}),
-				paramsArr: [Requests.COMPARS, {
-					z: pb[i], x: pb[i + 1], y: pb[i + 2], v: pb[i + 3], Level: pb[i + 4], Span: pb[i + 5],
-					LayerName: pars.id,
-					// bboxes: JSON.stringify(bbox || [WORLDBBOX]),
-					// generalizedTiles: false,
-					// zoom: zoom
-				}]
-			}).then(json => {
-				delete pars.signals.TileLoader;
-				return json;
-			})
-			.catch(err => {
-				console.error(err);
-				// resolve('');
-			})
-			);
+	if (!pars.tilesPromise) { pars.tilesPromise = {}; }
+	
+	// return new Promise((resolve) => {
+		let tilesOrder = pars.tilesOrder,
+			pb = pars.tiles,
+			tilesPromise = {};
+		for (let i = 0, len = pb.length; i < len; i += tilesOrder.length) {
+			let arr = pb.slice(i, i + tilesOrder.length),
+				tkey = arr.join('_'),
+				tHash = tilesOrder.reduce((p, c, j) => { p[c] = arr[j]; return p; }, {});
 
+			if (pars.tilesPromise[tkey]) {
+				tilesPromise[tkey] = pars.tilesPromise[tkey];
+			} else {
+				// pars.tilesPromise[tkey] = Requests.getTileJson({
+				tilesPromise[tkey] = Requests.getTileJson({
+					url: '//' + pars.hostName + '/TileSender.ashx',
+					options: Requests.chkSignal(tkey, pars.signals),
+					paramsArr: [tHash, {
+						r: 'j',
+						ModeKey: 'tile',
+						LayerName: pars.id,
+					}]
+				}).then(json => {
+					delete pars.signals[tkey];
+					if (typeof(json) === 'string') {
+						if (json.substr(0, TILE_PREFIX.length) === TILE_PREFIX) {
+							json = json.replace(TILE_PREFIX, '');
+							json = JSON.parse(json.substr(0, json.length -1));
+						}
+					}
+					return json;
+				})
+				.catch(err => {
+					console.error(err);
+				})
+			}
 		}
-	});
+		Object.keys(pars.signals).forEach(k => {
+			if (!tilesPromise[k]) {
+				pars.signals[k].abort();
+				delete pars.signals[k];
+			}
+		});
+		pars.tilesPromise = tilesPromise;
+		// return out;
+		// Promise.all(arr).then((out) => {
+			// resolve(out);
+		// });
+	// });
 };
 
 export default {
