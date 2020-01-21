@@ -190,6 +190,19 @@ var utils = {
 
     return resp.text();
   },
+  getBitMap: function getBitMap(url) {
+    var options = {
+      type: 'bitmap'
+    };
+    return fetch(url, options).then(function (res) {
+      return utils.chkResponse(res, options.type); // })
+      // .then(function(blob) {
+      // return createImageBitmap(blob, {
+      // premultiplyAlpha: 'none',
+      // colorSpaceConversion: 'none'
+      // });
+    });
+  },
   getTileJson: function getTileJson(queue) {
     var params = queue.params || {};
 
@@ -445,6 +458,7 @@ var Requests = {
   parseURLParams: parseURLParams,
   // getMapTree,
   extend: utils.extend,
+  getBitMap: utils.getBitMap,
   getFormBody: utils.getFormBody,
   getTileJson: utils.getTileJson,
   getJson: utils.getJson // addDataSource,
@@ -453,6 +467,20 @@ var Requests = {
   // getLayerItems
 
 };
+
+function _typeof(obj) {
+  if (typeof Symbol === "function" && typeof Symbol.iterator === "symbol") {
+    _typeof = function (obj) {
+      return typeof obj;
+    };
+  } else {
+    _typeof = function (obj) {
+      return obj && typeof Symbol === "function" && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj;
+    };
+  }
+
+  return _typeof(obj);
+}
 
 var TILE_PREFIX = 'gmxAPI._vectorTileReceiver(';
 
@@ -535,7 +563,27 @@ var HOST = 'maps.kosmosnimki.ru',
     W = WORLDWIDTHFULL / 2,
     WORLDBBOX = [[-W, -W, W, W]],
     SCRIPT = '/Layer/CheckVersion.ashx',
-    GMXPROXY = '//maps.kosmosnimki.ru/ApiSave.ashx';
+    GMXPROXY = '//maps.kosmosnimki.ru/ApiSave.ashx',
+    MINZOOM = 1,
+    MAXZOOM = 22,
+    STYLEKEYS = {
+  marker: {
+    server: ['image', 'angle', 'scale', 'minScale', 'maxScale', 'size', 'circle', 'center', 'color'],
+    client: ['iconUrl', 'iconAngle', 'iconScale', 'iconMinScale', 'iconMaxScale', 'iconSize', 'iconCircle', 'iconCenter', 'iconColor']
+  },
+  outline: {
+    server: ['color', 'opacity', 'thickness', 'dashes'],
+    client: ['color', 'opacity', 'weight', 'dashArray']
+  },
+  fill: {
+    server: ['color', 'opacity', 'image', 'pattern', 'radialGradient', 'linearGradient'],
+    client: ['fillColor', 'fillOpacity', 'fillIconUrl', 'fillPattern', 'fillRadialGradient', 'fillLinearGradient']
+  },
+  label: {
+    server: ['text', 'field', 'template', 'color', 'haloColor', 'size', 'spacing', 'align'],
+    client: ['labelText', 'labelField', 'labelTemplate', 'labelColor', 'labelHaloColor', 'labelFontSize', 'labelSpacing', 'labelAlign']
+  }
+};
 var hosts = {},
     zoom = 3,
     bbox = null,
@@ -572,23 +620,200 @@ var utils$1 = {
     utils$1.stop();
     intervalID = setInterval(chkVersion, delay);
   },
-  parseLayerProps: function parseLayerProps(prop) {
-    // let ph = utils.getTileAttributes(prop);
-    return Requests.extend({
-      properties: prop
-    }, utils$1.getTileAttributes(prop), utils$1.parseMetaProps(prop));
+
+  /*
+      parseLayerProps: function(prop) {
+  		// let ph = utils.getTileAttributes(prop);
+  		return Requests.extend(
+  			{
+  				properties: prop
+  			},
+  			utils.getTileAttributes(prop),
+  			utils.parseStyles(prop),
+  			utils.parseMetaProps(prop)
+  		);
+      },
+  */
+  parseFilter: function parseFilter(str) {
+    var regex1 = /"(.+?)" in \((.+?)\)/g,
+        regex2 = /"(.+?)"/g,
+        regexMath = /(floor\()/g,
+        body = str ? str.replace(/[[\]]/g, '"').replace(regex1, '[$2].includes(props[indexes[\'$1\']])').replace(regex2, 'props[indexes[\'$1\']]').replace(/=/g, '===').replace(/\bAND\b/g, '&&').replace(/\bOR\b/g, '||').replace(regexMath, 'Math.$1') : true;
+    return {
+      filter: str,
+      filterParsed: body,
+      filterFun: new Function('props', 'indexes', 'return ' + body + ';')
+    };
+  },
+  // StyleManager.decodeOldStyles = function(props) {
+  // var styles = props.styles,
+  // arr = styles || [{MinZoom: 1, MaxZoom: 21, RenderStyle: StyleManager.DEFAULT_STYLE}],
+  // type = props.type.toLocaleLowerCase(),
+  // gmxStyles = {
+  // attrKeys: {},
+  // iconsUrl: {}
+  // };
+  // gmxStyles.styles = arr.map(function(it) {
+  // var pt = {
+  // Name: it.Name || '',
+  // type: type || '',
+  legend: false,
+  // MinZoom: it.MinZoom || 0,
+  // MaxZoom: it.MaxZoom || 18
+  // };
+  // pt.labelMinZoom = it.labelMinZoom || pt.MinZoom;
+  // pt.labelMaxZoom = it.labelMaxZoom || pt.MaxZoom;
+  // if ('Balloon' in it) {
+  // pt.Balloon = it.Balloon;
+  // var hash = StyleManager.getKeysHash(it.Balloon, 'Balloon');
+  // if (Object.keys(hash).length) {
+  // L.extend(gmxStyles.attrKeys, hash);
+  // }
+  // }
+  // if (it.RenderStyle) {
+  // var rt = StyleManager.decodeOldStyle(it.RenderStyle);
+  // L.extend(gmxStyles.attrKeys, rt.attrKeys);
+  // if (rt.style.iconUrl) { gmxStyles.iconsUrl[rt.style.iconUrl] = true; }
+  // pt.RenderStyle = rt.style;
+  // if (it.HoverStyle === undefined) {
+  // var hoveredStyle = JSON.parse(JSON.stringify(pt.RenderStyle));
+  // if (hoveredStyle.outline) { hoveredStyle.outline.thickness += 1; }
+  // pt.HoverStyle = hoveredStyle;
+  // } else if (it.HoverStyle === null) {
+  // delete pt.HoverStyle;
+  // } else {
+  // var ht = StyleManager.decodeOldStyle(it.HoverStyle);
+  // pt.HoverStyle = ht.style;
+  // }
+  // } else if (type === 'vector ') {
+  // pt.RenderStyle = StyleManager.DEFAULT_STYLE;
+  // }
+  // if ('DisableBalloonOnMouseMove' in it) {
+  // pt.DisableBalloonOnMouseMove = it.DisableBalloonOnMouseMove === false ? false : true;
+  // }
+  // if ('DisableBalloonOnClick' in it) {
+  // pt.DisableBalloonOnClick = it.DisableBalloonOnClick || false;
+  // }
+  // if ('Filter' in it) {	// TODO: переделать на new Function = function(props, indexes, types)
+  // /*eslint-disable no-useless-escape */
+  // pt.Filter = it.Filter;
+  // var ph = L.gmx.Parsers.parseSQL(it.Filter.replace(/[\[\]]/g, '"'));
+  // /*eslint-enable */
+  // TODO: need body for function ƒ (props, indexes, types)
+  // if (ph) { pt.filterFunction = ph; }
+  // }
+  // return pt;
+  // });
+  // return gmxStyles;
+  // };
+  decodeOldStyle: function decodeOldStyle(style) {
+    // Style Scanex->leaflet
+    var st,
+        i,
+        len,
+        key,
+        key1,
+        styleOut = {}; // attrKeys = {},
+    // type = '';
+
+    for (key in STYLEKEYS) {
+      var keys = STYLEKEYS[key];
+
+      for (i = 0, len = keys.client.length; i < len; i++) {
+        key1 = keys.client[i];
+
+        if (key1 in style) {
+          styleOut[key1] = style[key1];
+        }
+      }
+
+      st = style[key];
+
+      if (st && _typeof(st) === 'object') {
+        for (i = 0, len = keys.server.length; i < len; i++) {
+          key1 = keys.server[i];
+
+          if (key1 in st) {
+            var newKey = keys.client[i],
+                zn = st[key1];
+
+            if (typeof zn === 'string') ; else if (key1 === 'opacity') {
+              zn /= 100;
+            }
+
+            styleOut[newKey] = zn;
+          }
+        }
+      }
+    }
+
+    if (style.marker) {
+      st = style.marker;
+
+      if ('dx' in st || 'dy' in st) {
+        var dx = st.dx || 0,
+            dy = st.dy || 0;
+        styleOut.iconAnchor = [-dx, -dy]; // For leaflet type iconAnchor
+      }
+    }
+
+    for (key in style) {
+      if (!STYLEKEYS[key]) {
+        styleOut[key] = style[key];
+      }
+    }
+
+    return styleOut;
+    /*
+    		return {
+    			style: styleOut,			// стиль
+    			// attrKeys: attrKeys,			// используемые поля атрибутов
+    			type: type					// 'polygon', 'line', 'circle', 'square', 'image'
+    		};
+    */
+  },
+  parseStyles: function parseStyles(prop) {
+    var styles = prop.styles || [],
+        // attr = prop.tileAttributeIndexes,
+    out = styles.map(function (it) {
+      return new Promise(function (resolve) {
+        var data = utils$1.parseFilter(it.Filter || ''),
+            renderStyle = it.RenderStyle; // iconUrl = renderStyle.iconUrl || (renderStyle.marker && renderStyle.marker.image);
+
+        data.MinZoom = it.MinZoom || MINZOOM;
+        data.MaxZoom = it.MaxZoom || MAXZOOM;
+
+        if (renderStyle) {
+          data.renderStyle = utils$1.decodeOldStyle(renderStyle);
+        } // if (iconUrl) {
+        // Requests.getBitMap(iconUrl).then(blob => {
+        // console.log('dsddd', blob);
+        // createImageBitmap(blob, {
+        // premultiplyAlpha: 'none',
+        // colorSpaceConversion: 'none'
+        // }).then(imageBitmap => {
+        // data.imageBitmap = imageBitmap;
+        // resolve(data);
+        // }).catch(console.warn);
+        // resolve(data);
+        // });
+        // } else {
+
+
+        resolve(data); // }
+        // return data;
+      });
+    });
+    return {
+      stylesPromise: Promise.all(out)
+    };
   },
   parseMetaProps: function parseMetaProps(prop) {
     var meta = prop.MetaProperties || {},
         ph = {};
-    ph.dataSource = prop.dataSource || prop.LayerID;
-
-    if ('parentLayer' in meta) {
-      // изменить dataSource через MetaProperties
-      ph.dataSource = meta.parentLayer.Value || '';
-    }
-
+    ph.dataSource = prop.dataSource || prop.LayerID || '';
     ['srs', // проекция слоя
+    'dataSource', // изменить dataSource через MetaProperties
     'gmxProxy', // установка прокачивалки
     'filter', // фильтр слоя
     'isGeneralized', // флаг generalization
@@ -611,17 +836,19 @@ var utils$1 = {
     'quicklookX4', // точки привязки снимка
     'quicklookY4' // точки привязки снимка
     ].forEach(function (k) {
-      ph[k] = k in meta ? meta[k].Value : '';
+      if (k in meta) {
+        ph[k] = meta[k].Value || '';
+      }
     });
 
-    if (ph.gmxProxy.toLowerCase() === 'true') {
+    if (ph.gmxProxy && ph.gmxProxy.toLowerCase() === 'true') {
       // проверка прокачивалки
       ph.gmxProxy = GMXPROXY;
     }
 
     if ('parentLayer' in meta) {
-      // фильтр слоя		// todo удалить после изменений вов вьювере
-      ph.dataSource = meta.parentLayer.Value || prop.dataSource || '';
+      // изменить dataSource через MetaProperties
+      ph.dataSource = meta.parentLayer.Value;
     }
 
     return ph;
@@ -649,6 +876,27 @@ var utils$1 = {
       tileAttributeTypes: tileAttributeTypes,
       tileAttributeIndexes: tileAttributeIndexes
     };
+  },
+  getStyleNum: function getStyleNum(itemArr, layerAttr, zoom) {
+    var indexes = layerAttr.tileAttributeIndexes;
+
+    if (layerAttr.stylesParsed) {
+      for (var i = 0, len = layerAttr.stylesParsed.length; i < len; i++) {
+        var st = layerAttr.stylesParsed[i];
+
+        if (zoom && (zoom < st.MinZoom || zoom > st.MaxZoom)) {
+          continue;
+        }
+
+        if (st.filterFun(itemArr, indexes)) {
+          return i;
+        }
+      }
+    } else {
+      return 0;
+    }
+
+    return -1;
   }
 }; // const COMPARS = {WrapStyle: 'None', ftc: 'osm', srs: 3857};
 // const chkSignal = (signalName, signals, opt) => {
@@ -722,6 +970,10 @@ var chkVersion = function chkVersion() {
               pt.v = props.LayerVersion;
               pt.properties = props;
               pt.geometry = it.geometry;
+
+              if (!pt.tileAttributeIndexes) {
+                Requests.extend(pt, utils$1.getTileAttributes(props));
+              }
             }
 
             pt.hostName = host;
@@ -797,6 +1049,14 @@ var addSource = function addSource(pars) {
     utils$1.now();
   } else {
     console.warn('Warning: Specify layer `id` and `hostName`', pars);
+  }
+
+  if (pars.vid) {
+    var linkAttr = hosts[pars.vHostName || HOST].parseLayers.layersByID[pars.vid];
+    Requests.extend(linkAttr, utils$1.parseStyles(linkAttr.properties));
+    linkAttr.stylesPromise.then(function (res) {
+      linkAttr.styles = res;
+    });
   } // console.log('addSource:', pars);
 
 
@@ -871,7 +1131,8 @@ var setDateInterval = function setDateInterval(pars) {
 var _iterateNodeChilds = function _iterateNodeChilds(node, level, out) {
   level = level || 0;
   out = out || {
-    layers: []
+    layers: [],
+    layersByID: {}
   };
 
   if (node) {
@@ -880,14 +1141,18 @@ var _iterateNodeChilds = function _iterateNodeChilds(node, level, out) {
         props = content.properties;
 
     if (type === 'layer') {
-      var ph = utils$1.parseLayerProps(props);
-      ph.level = level;
+      var ph = {
+        properties: props,
+        level: level
+      }; // let ph = utils.parseLayerProps(props);
+      // ph.level = level;
 
       if (content.geometry) {
         ph.geometry = content.geometry;
       }
 
       out.layers.push(ph);
+      out.layersByID[props.name] = ph;
     } else if (type === 'group') {
       var childs = content.children || [];
       out.layers.push({

@@ -130,6 +130,19 @@ let utils = {
 		}
 		return resp.text();
 	},
+	getBitMap: function(url) {
+		let options = {type: 'bitmap'};
+		return fetch(url, options)
+		.then(function(res) {
+			return utils.chkResponse(res, options.type);
+		// })
+		// .then(function(blob) {
+			// return createImageBitmap(blob, {
+				// premultiplyAlpha: 'none',
+				// colorSpaceConversion: 'none'
+			// });
+		});
+	},
 	getTileJson: function(queue) {
 		let params = queue.params || {};
 		if (queue.paramsArr) {
@@ -369,6 +382,7 @@ export default {
 	parseURLParams,
 	// getMapTree,
 	extend: utils.extend,
+	getBitMap: utils.getBitMap,
 	getFormBody: utils.getFormBody,
 	getTileJson: utils.getTileJson,
 	getJson: utils.getJson

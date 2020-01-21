@@ -216,6 +216,19 @@ var gmxWorker = (function (exports, L) {
 
         return resp.text();
       },
+      getBitMap: function getBitMap(url) {
+        var options = {
+          type: 'bitmap'
+        };
+        return fetch(url, options).then(function (res) {
+          return utils.chkResponse(res, options.type); // })
+          // .then(function(blob) {
+          // return createImageBitmap(blob, {
+          // premultiplyAlpha: 'none',
+          // colorSpaceConversion: 'none'
+          // });
+        });
+      },
       getTileJson: function getTileJson(queue) {
         var params = queue.params || {};
 
@@ -471,6 +484,7 @@ var gmxWorker = (function (exports, L) {
       parseURLParams: parseURLParams,
       // getMapTree,
       extend: utils.extend,
+      getBitMap: utils.getBitMap,
       getFormBody: utils.getFormBody,
       getTileJson: utils.getTileJson,
       getJson: utils.getJson // addDataSource,
@@ -489,6 +503,47 @@ var gmxWorker = (function (exports, L) {
     WORLDBBOX = [[-W, -W, W, W]]; //dataWorker.postMessage('Hello World!');
 
     var Utils = {
+      getStyleAtlas: function getStyleAtlas(styles) {
+        var res = styles.map(function (st) {
+          var rst = st.RenderStyle,
+              cancelProm = new Promise(function (resolve) {
+            return resolve(null);
+          });
+
+          if (!rst || !rst.iconUrl) {
+            return cancelProm;
+          } else {
+            return fetch(rst.iconUrl, {
+              mode: 'cors',
+              type: 'bitmap'
+            }).then(function (req) {
+              return req.blob();
+            }) // .then(blob => createImageBitmap(blob, { premultiplyAlpha: 'none', colorSpaceConversion: 'none', }))
+            .catch(function (err) {
+              console.warn(err);
+              return cancelProm;
+            });
+          }
+        });
+        return Promise.all(res).then(function (arr) {
+          console.log('getStyleAtlas', arr);
+        }); // async function loadNextImage() {
+        // const url = `${imageUrls[imgNdx]}?cachebust=${performance.now()}`;
+        // imgNdx = (imgNdx + 1) % imageUrls.length;
+        // const res = await fetch(url, {mode: 'cors'});
+        // const blob = await res.blob();
+        // const bitmap = await createImageBitmap(blob, {
+        // premultiplyAlpha: 'none',
+        // colorSpaceConversion: 'none',
+        // });
+        // if (update) {
+        // gl.bindTexture(gl.TEXTURE_2D, tex);
+        // gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, bitmap);
+        // imgAspect = bitmap.width / bitmap.height;
+        // }
+        // setTimeout(loadNextImage, 1000);
+        // }
+      },
       getBboxes: function getBboxes(map) {
         if (map.options.allWorld) {
           return WORLDBBOX;
@@ -608,8 +663,9 @@ var gmxWorker = (function (exports, L) {
 
             if (cmd === 'getMap') {
               resolve(json);
-            } // console.log('onmessage', json);
+            }
 
+            console.log('getMap _____________', json);
           };
 
           dataWorker.postMessage({
@@ -636,7 +692,8 @@ var gmxWorker = (function (exports, L) {
               pars = {
             cmd: 'addDataSource',
             id: id,
-            // id: _gmx.layerID,
+            vid: _gmx.layerID,
+            vHostName: _gmx.hostName,
             // v: opt.LayerVersion,
             // gmxStyles: gmxProps.gmxStyles,
             hostName: hostName,
@@ -658,9 +715,10 @@ var gmxWorker = (function (exports, L) {
 
           if (map.options.generalized === false) {
             pars.generalizedTiles = false;
-          } // console.log('layeradd', opt, dm.getD);
+          }
 
-
+          var arr = layer.getStyles();
+          console.log('layeradd styles', arr, Utils.getStyleAtlas(arr));
           return new Promise(function (resolve) {
             if (_gmx) {
               dataWorker.onmessage = function (res) {
@@ -721,7 +779,7 @@ var gmxWorker = (function (exports, L) {
           }
         });
       });
-      Utils.getMap().then(console.log);
+      Utils.getMap().then('cccccccccccccc', console.log);
     });
     L.gmxWorker = Utils;
 

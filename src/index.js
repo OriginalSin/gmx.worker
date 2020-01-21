@@ -12,6 +12,42 @@ const WORLDWIDTHFULL = 40075016.685578496,
 	WORLDBBOX = [[-W, -W, W, W]];
 //dataWorker.postMessage('Hello World!');
 const Utils = {
+
+    getStyleAtlas: (styles) => {
+		let res = styles.map(st => {
+			const rst = st.RenderStyle,
+				cancelProm = new Promise(resolve => resolve(null));
+            if (!rst || !rst.iconUrl) {
+				return cancelProm;
+			} else {
+				return fetch(rst.iconUrl, {mode: 'cors', type: 'bitmap'})
+					.then(req => req.blob())
+					// .then(blob => createImageBitmap(blob, { premultiplyAlpha: 'none', colorSpaceConversion: 'none', }))
+					.catch((err) => { console.warn(err); return cancelProm;});
+			}
+		});
+		return Promise.all(res).then(arr => {
+			console.log('getStyleAtlas', arr);
+		});
+
+// async function loadNextImage() {
+  // const url = `${imageUrls[imgNdx]}?cachebust=${performance.now()}`;
+  // imgNdx = (imgNdx + 1) % imageUrls.length;
+  // const res = await fetch(url, {mode: 'cors'});
+  // const blob = await res.blob();
+  // const bitmap = await createImageBitmap(blob, {
+    // premultiplyAlpha: 'none',
+    // colorSpaceConversion: 'none',
+  // });
+  // if (update) {
+    // gl.bindTexture(gl.TEXTURE_2D, tex);
+    // gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, bitmap);
+    // imgAspect = bitmap.width / bitmap.height;
+  // }
+  // setTimeout(loadNextImage, 1000);
+// }
+    },
+
 	getBboxes: function(map) {
 		if (map.options.allWorld) {
 			return WORLDBBOX;
@@ -112,7 +148,7 @@ const Utils = {
 				if (cmd === 'getMap') {
 					resolve(json);
 				}
-		// console.log('onmessage', json);
+		console.log('getMap _____________', json);
 			};
 			dataWorker.postMessage({
 				cmd: 'getMap',
@@ -140,7 +176,8 @@ L.Map.addInitHook(function () {
 					pars = {
 						cmd: 'addDataSource',
 						id: id,
-						// id: _gmx.layerID,
+						vid: _gmx.layerID,
+						vHostName: _gmx.hostName,
 						// v: opt.LayerVersion,
 						// gmxStyles: gmxProps.gmxStyles,
 						hostName: hostName,
@@ -159,7 +196,9 @@ L.Map.addInitHook(function () {
 				if (map.options.generalized === false) {
 					pars.generalizedTiles = false;
 				}
-// console.log('layeradd', opt, dm.getD);
+				let arr = layer.getStyles();
+console.log('layeradd styles', arr, Utils.getStyleAtlas(arr));
+
 
 				return new Promise((resolve) => {
 					if (_gmx) {
@@ -213,7 +252,7 @@ L.Map.addInitHook(function () {
 			});
 		});
 	Utils.getMap()
-		.then(console.log)
+		.then('cccccccccccccc', console.log)
 
 });
 

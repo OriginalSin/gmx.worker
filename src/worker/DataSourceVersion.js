@@ -6,7 +6,75 @@ const HOST = 'maps.kosmosnimki.ru',
 	W = WORLDWIDTHFULL / 2,
 	WORLDBBOX = [[-W, -W, W, W]],
     SCRIPT = '/Layer/CheckVersion.ashx',
-	GMXPROXY = '//maps.kosmosnimki.ru/ApiSave.ashx';
+	GMXPROXY = '//maps.kosmosnimki.ru/ApiSave.ashx',
+	MINZOOM = 1,
+	MAXZOOM = 22,
+    STYLEKEYS = {
+        marker: {
+            server: ['image',   'angle',     'scale',     'minScale',     'maxScale',     'size',         'circle',     'center',     'color'],
+            client: ['iconUrl', 'iconAngle', 'iconScale', 'iconMinScale', 'iconMaxScale', 'iconSize', 'iconCircle', 'iconCenter', 'iconColor']
+        },
+        outline: {
+            server: ['color',  'opacity',   'thickness', 'dashes'],
+            client: ['color',  'opacity',   'weight',    'dashArray']
+        },
+        fill: {
+            server: ['color',     'opacity',   'image',       'pattern',     'radialGradient',     'linearGradient'],
+            client: ['fillColor', 'fillOpacity', 'fillIconUrl', 'fillPattern', 'fillRadialGradient', 'fillLinearGradient']
+        },
+        label: {
+            server: ['text',      'field',      'template',      'color',      'haloColor',      'size',          'spacing',      'align'],
+            client: ['labelText', 'labelField', 'labelTemplate', 'labelColor', 'labelHaloColor', 'labelFontSize', 'labelSpacing', 'labelAlign']
+        }
+    },
+    STYLEFUNCKEYS = {
+        // iconUrl: 'iconUrlFunction',
+        iconSize: 'iconSizeFunction',
+        iconAngle: 'rotateFunction',
+        iconScale: 'scaleFunction',
+        iconColor: 'iconColorFunction',
+        opacity: 'opacityFunction',
+        fillOpacity: 'fillOpacityFunction',
+        color: 'colorFunction',
+        fillColor: 'fillColorFunction'
+/*
+    },
+
+    STYLEFUNCERROR = {
+        // iconUrl: function() { return ''; },
+        iconSize: function() { return 8; },
+        iconAngle: function() { return 0; },
+        iconScale: function() { return 1; },
+        iconColor: function() { return 0xFF; },
+        opacity: function() { return 1; },
+        fillOpacity: function() { return 0.5; },
+        color: function() { return 0xFF; },
+        fillColor: function() { return 0xFF; }
+    },
+    DEFAULTSTYLES = {
+       MinZoom: 1,
+       MaxZoom: 21,
+       Filter: '',
+       Balloon: '',
+       DisableBalloonOnMouseMove: true,
+       DisableBalloonOnClick: false,
+       RenderStyle: {
+            point: {    // old = {outline: {color: 255, thickness: 1}, marker:{size: 8}},
+                color: 0xFF,
+                weight: 1,
+                iconSize: 8
+            },
+            linestring: {    // old = {outline: {color: 255, thickness: 1}},
+                color: 0xFF,
+                weight: 1
+            },
+            polygon: {    // old = {outline: {color: 255, thickness: 1}},
+                color: 0xFF,
+                weight: 1
+            }
+        }
+*/
+    };
 
 let hosts = {},
     zoom = 3,
@@ -36,7 +104,7 @@ const utils = {
         utils.stop();
         intervalID = setInterval(chkVersion, delay);
     },
-
+/*
     parseLayerProps: function(prop) {
 		// let ph = utils.getTileAttributes(prop);
 		return Requests.extend(
@@ -44,19 +112,209 @@ const utils = {
 				properties: prop
 			},
 			utils.getTileAttributes(prop),
+			utils.parseStyles(prop),
 			utils.parseMetaProps(prop)
 		);
+    },
+*/
+    parseFilter: function(str) {
+		let regex1 = /"(.+?)" in \((.+?)\)/g,
+			regex2 = /"(.+?)"/g,
+			regexMath = /(floor\()/g,
+			body = str ? str
+				.replace(/[[\]]/g, '"')
+				.replace(regex1, '[$2].includes(props[indexes[\'$1\']])')
+				.replace(regex2, 'props[indexes[\'$1\']]')
+				.replace(/=/g, '===')
+				.replace(/\bAND\b/g, '&&')
+				.replace(/\bOR\b/g, '||')
+				.replace(regexMath, 'Math.$1')
+				: true;
+		return {
+			filter: str,
+			filterParsed: body,
+			filterFun: new Function('props', 'indexes', 'return ' + body + ';')
+		};
+    },
+
+// StyleManager.decodeOldStyles = function(props) {
+    // var styles = props.styles,
+		// arr = styles || [{MinZoom: 1, MaxZoom: 21, RenderStyle: StyleManager.DEFAULT_STYLE}],
+		// type = props.type.toLocaleLowerCase(),
+		// gmxStyles = {
+			// attrKeys: {},
+			// iconsUrl: {}
+		// };
+	// gmxStyles.styles = arr.map(function(it) {
+        // var pt = {
+            // Name: it.Name || '',
+            // type: type || '',
+			legend: false,
+            // MinZoom: it.MinZoom || 0,
+            // MaxZoom: it.MaxZoom || 18
+        // };
+		// pt.labelMinZoom = it.labelMinZoom || pt.MinZoom;
+		// pt.labelMaxZoom = it.labelMaxZoom || pt.MaxZoom;
+
+        // if ('Balloon' in it) {
+            // pt.Balloon = it.Balloon;
+			// var hash = StyleManager.getKeysHash(it.Balloon, 'Balloon');
+			// if (Object.keys(hash).length) {
+				// L.extend(gmxStyles.attrKeys, hash);
+			// }
+        // }
+        // if (it.RenderStyle) {
+            // var rt = StyleManager.decodeOldStyle(it.RenderStyle);
+			// L.extend(gmxStyles.attrKeys, rt.attrKeys);
+			// if (rt.style.iconUrl) { gmxStyles.iconsUrl[rt.style.iconUrl] = true; }
+            // pt.RenderStyle = rt.style;
+			// if (it.HoverStyle === undefined) {
+				// var hoveredStyle = JSON.parse(JSON.stringify(pt.RenderStyle));
+				// if (hoveredStyle.outline) { hoveredStyle.outline.thickness += 1; }
+				// pt.HoverStyle = hoveredStyle;
+			// } else if (it.HoverStyle === null) {
+				// delete pt.HoverStyle;
+			// } else {
+				// var ht = StyleManager.decodeOldStyle(it.HoverStyle);
+				// pt.HoverStyle = ht.style;
+			// }
+        // } else if (type === 'vector ') {
+            // pt.RenderStyle = StyleManager.DEFAULT_STYLE;
+		// }
+
+        // if ('DisableBalloonOnMouseMove' in it) {
+            // pt.DisableBalloonOnMouseMove = it.DisableBalloonOnMouseMove === false ? false : true;
+        // }
+        // if ('DisableBalloonOnClick' in it) {
+            // pt.DisableBalloonOnClick = it.DisableBalloonOnClick || false;
+        // }
+        // if ('Filter' in it) {	// TODO: переделать на new Function = function(props, indexes, types)
+// /*eslint-disable no-useless-escape */
+            // pt.Filter = it.Filter;
+            // var ph = L.gmx.Parsers.parseSQL(it.Filter.replace(/[\[\]]/g, '"'));
+// /*eslint-enable */
+			// TODO: need body for function ƒ (props, indexes, types)
+            // if (ph) { pt.filterFunction = ph; }
+        // }
+		// return pt;
+	// });
+    // return gmxStyles;
+// };
+
+	decodeOldStyle: function(style) {   // Style Scanex->leaflet
+		let st, i, len, key, key1,
+			styleOut = {};
+			// attrKeys = {},
+			// type = '';
+
+		for (key in STYLEKEYS) {
+			let keys = STYLEKEYS[key];
+			for (i = 0, len = keys.client.length; i < len; i++) {
+				key1 = keys.client[i];
+				if (key1 in style) {
+					styleOut[key1] = style[key1];
+				}
+			}
+			st = style[key];
+			if (st && typeof (st) === 'object') {
+				for (i = 0, len = keys.server.length; i < len; i++) {
+					key1 = keys.server[i];
+					if (key1 in st) {
+						var newKey = keys.client[i],
+							zn = st[key1];
+						if (typeof (zn) === 'string') {
+							// var hash = StyleManager.getKeysHash(zn, newKey);
+							// if (Object.keys(hash).length) {
+								// styleOut.common = false;
+								// L.extend(attrKeys, hash);
+							// }
+							if (STYLEFUNCKEYS[newKey]) {
+								// if (zn.match(/[^\d\.]/) === null) {
+									// zn = Number(zn);
+								// } else {
+									//var func = L.gmx.Parsers.parseExpression(zn);
+									// if (func === null) {
+										// zn = STYLEFUNCERROR[newKey]();
+									// } else {
+										// styleOut[STYLEFUNCKEYS[newKey]] = func;
+									// }
+								// }
+							}
+						} else if (key1 === 'opacity') {
+							zn /= 100;
+						}
+						styleOut[newKey] = zn;
+					}
+				}
+			}
+		}
+		if (style.marker) {
+			st = style.marker;
+			if ('dx' in st || 'dy' in st) {
+				var dx = st.dx || 0,
+					dy = st.dy || 0;
+				styleOut.iconAnchor = [-dx, -dy];    // For leaflet type iconAnchor
+			}
+		}
+		for (key in style) {
+			if (!STYLEKEYS[key]) {
+				styleOut[key] = style[key];
+			}
+		}
+		return styleOut;
+/*
+		return {
+			style: styleOut,			// стиль
+			// attrKeys: attrKeys,			// используемые поля атрибутов
+			type: type					// 'polygon', 'line', 'circle', 'square', 'image'
+		};
+*/
+	},
+
+    parseStyles: (prop) => {
+        let styles = prop.styles || [],
+			// attr = prop.tileAttributeIndexes,
+            out = styles.map(it => {
+				return new Promise(resolve => {
+					let data = utils.parseFilter(it.Filter || ''),
+						renderStyle = it.RenderStyle;
+						// iconUrl = renderStyle.iconUrl || (renderStyle.marker && renderStyle.marker.image);
+					data.MinZoom = it.MinZoom || MINZOOM;
+					data.MaxZoom = it.MaxZoom || MAXZOOM;
+					if (renderStyle) {
+						data.renderStyle = utils.decodeOldStyle(renderStyle);
+					}
+
+					// if (iconUrl) {
+						// Requests.getBitMap(iconUrl).then(blob => {
+							// console.log('dsddd', blob);
+							// createImageBitmap(blob, {
+								// premultiplyAlpha: 'none',
+								// colorSpaceConversion: 'none'
+							// }).then(imageBitmap => {
+								// data.imageBitmap = imageBitmap;
+								// resolve(data);
+							// }).catch(console.warn);
+							// resolve(data);
+						// });
+					// } else {
+						resolve(data);
+					// }
+					// return data;
+				})
+			});
+		return {
+			stylesPromise: Promise.all(out)
+		};
     },
 
     parseMetaProps: function(prop) {
         var meta = prop.MetaProperties || {},
             ph = {};
-        ph.dataSource = prop.dataSource || prop.LayerID;
-		if ('parentLayer' in meta) {								// изменить dataSource через MetaProperties
-			ph.dataSource = meta.parentLayer.Value || '';
-		}
+        ph.dataSource = prop.dataSource || prop.LayerID || '';
 		[
 			'srs',					// проекция слоя
+			'dataSource',			// изменить dataSource через MetaProperties
 			'gmxProxy',				// установка прокачивалки
 			'filter',				// фильтр слоя
 			'isGeneralized',		// флаг generalization
@@ -79,27 +337,29 @@ const utils = {
 			'quicklookX4',			// точки привязки снимка
 			'quicklookY4'			// точки привязки снимка
 		].forEach((k) => {
-			ph[k] = k in meta ? meta[k].Value : '';
+			if (k in meta) {
+				ph[k] = meta[k].Value || '';
+			}
 		});
-		if (ph.gmxProxy.toLowerCase() === 'true') {    // проверка прокачивалки
+		if (ph.gmxProxy && ph.gmxProxy.toLowerCase() === 'true') {		// проверка прокачивалки
 			ph.gmxProxy = GMXPROXY;
 		}
-		if ('parentLayer' in meta) {  // фильтр слоя		// todo удалить после изменений вов вьювере
-			ph.dataSource = meta.parentLayer.Value || prop.dataSource || '';
+		if ('parentLayer' in meta) {					// изменить dataSource через MetaProperties
+			ph.dataSource = meta.parentLayer.Value;
 		}
 
         return ph;
     },
 
     getTileAttributes: function(prop) {
-        var tileAttributeIndexes = {},
+        let tileAttributeIndexes = {},
             tileAttributeTypes = {};
         if (prop.attributes) {
-            var attrs = prop.attributes,
+            let attrs = prop.attributes,
                 attrTypes = prop.attrTypes || null;
             if (prop.identityField) { tileAttributeIndexes[prop.identityField] = 0; }
-            for (var a = 0; a < attrs.length; a++) {
-                var key = attrs[a];
+            for (let a = 0; a < attrs.length; a++) {
+                let key = attrs[a];
                 tileAttributeIndexes[key] = a + 1;
                 tileAttributeTypes[key] = attrTypes ? attrTypes[a] : 'string';
             }
@@ -108,8 +368,21 @@ const utils = {
             tileAttributeTypes: tileAttributeTypes,
             tileAttributeIndexes: tileAttributeIndexes
         };
-    }
+    },
 
+	getStyleNum: function(itemArr, layerAttr, zoom) {
+		let indexes = layerAttr.tileAttributeIndexes;
+		if (layerAttr.stylesParsed) {
+			for (let i = 0, len = layerAttr.stylesParsed.length; i < len; i++) {
+				let st = layerAttr.stylesParsed[i];
+				if (zoom && (zoom < st.MinZoom || zoom > st.MaxZoom)) { continue; }
+				if (st.filterFun(itemArr, indexes)) { return i; }
+			}
+		} else {
+			return 0;
+		}
+		return -1;
+	}
 };
 
 // const COMPARS = {WrapStyle: 'None', ftc: 'osm', srs: 3857};
@@ -179,6 +452,9 @@ const chkVersion = () => {
 							pt.v = props.LayerVersion;
 							pt.properties = props;
 							pt.geometry = it.geometry;
+							if (!pt.tileAttributeIndexes) {
+								Requests.extend(pt, utils.getTileAttributes(props));
+							}
 						}
 						pt.hostName = host;
 						pt.tiles = it.tiles;
@@ -239,6 +515,17 @@ const addSource = (pars) => {
 	} else {
 		console.warn('Warning: Specify layer `id` and `hostName`', pars);
 	}
+	if (pars.vid) {
+		let parseLayers = hosts[pars.vHostName || HOST].parseLayers;
+		if (parseLayers) {
+			let linkAttr = parseLayers.layersByID[pars.vid];
+			Requests.extend(linkAttr, utils.parseStyles(linkAttr.properties));
+			linkAttr.stylesPromise.then((res) => {
+				linkAttr.styles = res;
+			});
+		}
+	}
+
 // console.log('addSource:', pars);
 	return;
 };
@@ -294,7 +581,8 @@ console.log('setDateInterval:', pars, hosts);
 const _iterateNodeChilds = (node, level, out) => {
 	level = level || 0;
 	out = out || {
-		layers: []
+		layers: [],
+		layersByID: {}
 	};
 	
 	if (node) {
@@ -302,10 +590,15 @@ const _iterateNodeChilds = (node, level, out) => {
 			content = node.content,
 			props = content.properties;
 		if (type === 'layer') {
-			let ph = utils.parseLayerProps(props);
-			ph.level = level;
+			let ph = {
+				properties: props,
+				level: level
+			};
+			// let ph = utils.parseLayerProps(props);
+			// ph.level = level;
 			if (content.geometry) { ph.geometry = content.geometry; }
 			out.layers.push(ph);
+			out.layersByID[props.name] = ph;
 		} else if (type === 'group') {
 			let childs = content.children || [];
 			out.layers.push({ level: level, group: true, childsLen: childs.length, properties: props });
