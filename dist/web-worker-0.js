@@ -254,6 +254,76 @@ var utils = {
         error: err.toString()
       }; // handler.workerContext.postMessage(out);
     });
+  },
+  geoItemBounds: function geoItemBounds(geo) {
+    // get item bounds array by geometry
+    if (!geo) {
+      return {
+        bounds: null,
+        boundsArr: []
+      };
+    }
+
+    var type = geo.type,
+        coords = geo.coordinates,
+        b = null,
+        i = 0,
+        len = 0,
+        bounds = null,
+        boundsArr = [];
+
+    if (type === 'MULTIPOLYGON' || type === 'MultiPolygon') {
+      bounds = new Bounds();
+
+      for (i = 0, len = coords.length; i < len; i++) {
+        var arr1 = [];
+
+        for (var j = 0, len1 = coords[i].length; j < len1; j++) {
+          b = new Bounds(coords[i][j]);
+          arr1.push(b);
+
+          if (j === 0) {
+            bounds.extendBounds(b);
+          }
+        }
+
+        boundsArr.push(arr1);
+      }
+    } else if (type === 'POLYGON' || type === 'Polygon') {
+      bounds = new Bounds();
+
+      for (i = 0, len = coords.length; i < len; i++) {
+        b = new Bounds(coords[i]);
+        boundsArr.push(b);
+
+        if (i === 0) {
+          bounds.extendBounds(b);
+        }
+      }
+    } else if (type === 'POINT' || type === 'Point') {
+      bounds = new Bounds([coords]);
+    } else if (type === 'MULTIPOINT' || type === 'MultiPoint') {
+      bounds = new Bounds();
+
+      for (i = 0, len = coords.length; i < len; i++) {
+        b = new Bounds([coords[i]]);
+        bounds.extendBounds(b);
+      }
+    } else if (type === 'LINESTRING' || type === 'LineString') {
+      bounds = new Bounds(coords); //boundsArr.push(bounds);
+    } else if (type === 'MULTILINESTRING' || type === 'MultiLineString') {
+      bounds = new Bounds();
+
+      for (i = 0, len = coords.length; i < len; i++) {
+        b = new Bounds(coords[i]);
+        bounds.extendBounds(b); //boundsArr.push(b);
+      }
+    }
+
+    return {
+      bounds: bounds,
+      boundsArr: boundsArr
+    };
   }
 };
 /*
@@ -450,7 +520,134 @@ var chkSignal = function chkSignal(signalName, signals, opt) {
   return opt;
 };
 
+var Bounds = function Bounds(arr) {
+  this.min = {
+    x: Number.MAX_VALUE,
+    y: Number.MAX_VALUE
+  };
+  this.max = {
+    x: -Number.MAX_VALUE,
+    y: -Number.MAX_VALUE
+  };
+  this.extendArray(arr);
+};
+
+Bounds.prototype = {
+  extend: function extend(x, y) {
+    if (x < this.min.x) {
+      this.min.x = x;
+    }
+
+    if (x > this.max.x) {
+      this.max.x = x;
+    }
+
+    if (y < this.min.y) {
+      this.min.y = y;
+    }
+
+    if (y > this.max.y) {
+      this.max.y = y;
+    }
+
+    return this;
+  },
+  extendBounds: function extendBounds(bounds) {
+    return this.extendArray([[bounds.min.x, bounds.min.y], [bounds.max.x, bounds.max.y]]);
+  },
+  extendArray: function extendArray(arr) {
+    if (!arr || !arr.length) {
+      return this;
+    }
+
+    var i, len;
+
+    if (typeof arr[0] === 'number') {
+      for (i = 0, len = arr.length; i < len; i += 2) {
+        this.extend(arr[i], arr[i + 1]);
+      }
+    } else {
+      for (i = 0, len = arr.length; i < len; i++) {
+        this.extend(arr[i][0], arr[i][1]);
+      }
+    }
+
+    return this;
+  },
+  addBuffer: function addBuffer(dxmin, dymin, dxmax, dymax) {
+    this.min.x -= dxmin;
+    this.min.y -= dymin || dxmin;
+    this.max.x += dxmax || dxmin;
+    this.max.y += dymax || dymin || dxmin;
+    return this;
+  },
+  contains: function contains(point) {
+    // ([x, y]) -> Boolean
+    var min = this.min,
+        max = this.max,
+        x = point[0],
+        y = point[1];
+    return x >= min.x && x <= max.x && y >= min.y && y <= max.y;
+  },
+  getCenter: function getCenter() {
+    var min = this.min,
+        max = this.max;
+    return [(min.x + max.x) / 2, (min.y + max.y) / 2];
+  },
+  addOffset: function addOffset(offset) {
+    this.min.x += offset[0];
+    this.max.x += offset[0];
+    this.min.y += offset[1];
+    this.max.y += offset[1];
+    return this;
+  },
+  intersects: function intersects(bounds) {
+    // (Bounds) -> Boolean
+    var min = this.min,
+        max = this.max,
+        min2 = bounds.min,
+        max2 = bounds.max;
+    return max2.x > min.x && min2.x < max.x && max2.y > min.y && min2.y < max.y;
+  },
+  intersectsWithDelta: function intersectsWithDelta(bounds, dx, dy) {
+    // (Bounds, dx, dy) -> Boolean
+    var min = this.min,
+        max = this.max,
+        x = dx || 0,
+        y = dy || 0,
+        min2 = bounds.min,
+        max2 = bounds.max;
+    return max2.x + x > min.x && min2.x - x < max.x && max2.y + y > min.y && min2.y - y < max.y;
+  },
+  isEqual: function isEqual(bounds) {
+    // (Bounds) -> Boolean
+    var min = this.min,
+        max = this.max,
+        min2 = bounds.min,
+        max2 = bounds.max;
+    return max2.x === max.x && min2.x === min.x && max2.y === max.y && min2.y === min.y;
+  },
+  isNodeIntersect: function isNodeIntersect(coords) {
+    for (var i = 0, len = coords.length; i < len; i++) {
+      if (this.contains(coords[i])) {
+        return {
+          num: i,
+          point: coords[i]
+        };
+      }
+    }
+
+    return null;
+  }
+}; // bounds: function(arr) {
+// return new Bounds(arr);
+// },
+
 var Requests = {
+  bounds: function bounds(arr) {
+    return new Bounds(arr);
+  },
+  geoItemBounds: utils.geoItemBounds,
   chkSignal: chkSignal,
   COMPARS: COMPARS,
   setSyncParams: setSyncParams,
@@ -530,6 +727,7 @@ var load = function load(pars) {
           }
         }
 
+        json.bounds = Requests.bounds(json.bbox);
         return json;
       }).catch(function (err) {
         console.error(err);
@@ -980,10 +1178,10 @@ var chkVersion = function chkVersion() {
             pt.tiles = it.tiles;
             pt.tilesOrder = it.tilesOrder; // pt.tilesPromise = 
 
-            TilesLoader.load(pt);
-            Promise.all(Object.values(pt.tilesPromise)).then(function (res) {
-              console.log('tilesPromise ___:', hosts, res);
-            }); // pt.tilesPromise.then(res => {
+            TilesLoader.load(pt); // Promise.all(Object.values(pt.tilesPromise)).then((res) => {
+            // console.log('tilesPromise ___:', hosts, res);
+            // });
+            // pt.tilesPromise.then(res => {
             // console.log('tilesPromise ___:', hosts, res);
             // });
             // console.log('chkVersion ___:', pt);
@@ -1052,11 +1250,15 @@ var addSource = function addSource(pars) {
   }
 
   if (pars.vid) {
-    var linkAttr = hosts[pars.vHostName || HOST].parseLayers.layersByID[pars.vid];
-    Requests.extend(linkAttr, utils$1.parseStyles(linkAttr.properties));
-    linkAttr.stylesPromise.then(function (res) {
-      linkAttr.styles = res;
-    });
+    var parseLayers = hosts[pars.vHostName || HOST].parseLayers;
+
+    if (parseLayers) {
+      var linkAttr = parseLayers.layersByID[pars.vid];
+      Requests.extend(linkAttr, utils$1.parseStyles(linkAttr.properties));
+      linkAttr.stylesPromise.then(function (res) {
+        linkAttr.styles = res;
+      });
+    }
   } // console.log('addSource:', pars);
 
 
@@ -1113,6 +1315,146 @@ var moveend = function moveend(pars) {
 
   utils$1.now();
   return;
+};
+
+var _checkObserversTimer = null;
+
+var _waitCheckObservers = function _waitCheckObservers() {
+  if (_checkObserversTimer) {
+    clearTimeout(_checkObserversTimer);
+  }
+
+  _checkObserversTimer = setTimeout(checkObservers, 25);
+};
+/*
+const chkTiles = (opt) => {
+	let	arr = [],
+		tcnt = 0,
+		pars = opt.observer.pars,
+		// dateInterval = pars.dateInterval,
+		obbox = pars.bbox;
+	for (let i = 0, len = opt.tiles.length; i < len; i++) {
+		let tile = opt.tiles[i],
+			bbox = tile.bbox;
+		if (bbox[0] > obbox.max.x || bbox[2] < obbox.min.x || bbox[1] > obbox.max.y || bbox[3] < obbox.min.y) {continue;}
+		tcnt++;
+	}
+console.log('chkTiles _1______________:', tcnt, pars.zKey, opt); //, tile.z, tile.x, tile.y, tile.span, tile.level);
+	return arr;
+
+};
+*/
+
+
+var checkObservers = function checkObservers() {
+  console.log('checkObservers _______________:', hosts);
+  Object.keys(hosts).forEach(function (host) {
+    Object.keys(hosts[host].ids).forEach(function (layerID) {
+      var tData = hosts[host].ids[layerID],
+          layerData = hosts[host].parseLayers.layersByID[layerID],
+          oKeys = Object.keys(tData.observers),
+          tilesPromise = tData.tilesPromise;
+
+      if (tilesPromise) {
+        Promise.all(Object.values(tilesPromise)).then(function (arrTiles) {
+          var _loop2 = function _loop2(i, len) {
+            var tile = arrTiles[i],
+                itemsbounds = tile.itemsbounds;
+
+            if (!itemsbounds) {
+              itemsbounds = tile.itemsbounds = [];
+            }
+
+            var _loop3 = function _loop3(j, len1) {
+              var zKey = oKeys[j],
+                  observer = tData.observers[zKey];
+
+              if (!observer || !observer.bounds.intersects(tile.bounds)) {
+                return "continue";
+              }
+
+              if (!observer.tcnt) {
+                observer.tcnt = 0;
+              }
+
+              observer.tcnt++;
+              observer.items = [];
+              tile.values.forEach(function (it, n) {
+                var geo = it[it.length - 1],
+                    bounds = itemsbounds[n];
+
+                if (!bounds) {
+                  bounds = itemsbounds[n] = Requests.geoItemBounds(geo);
+                }
+
+                observer.items.push(it);
+              });
+            };
+
+            for (var j = 0, len1 = oKeys.length; j < len1; j++) {
+              var _ret = _loop3(j);
+
+              if (_ret === "continue") continue;
+            }
+          };
+
+          for (var i = 0, len = arrTiles.length; i < len; i++) {
+            _loop2(i);
+          }
+
+          console.log('checkObservers _____1__________:', hosts);
+        });
+      }
+    });
+  });
+};
+
+var addObserver = function addObserver(pars) {
+  console.log('addObserver_______________:', pars, hosts);
+  return new Promise(function (resolve) {
+    var layerID = pars.layerID,
+        zKey = pars.zKey,
+        host = hosts[pars.hostName || HOST],
+        out = {};
+
+    if (host && host.parseLayers.layersByID[layerID]) {
+      // let stData = host.parseLayers.layersByID[layerID],
+      var tData = host.ids[layerID];
+
+      if (!tData.observers) {
+        tData.observers = {};
+      }
+
+      tData.observers[zKey] = {
+        bounds: Requests.bounds().extendBounds(pars.bbox),
+        pars: pars,
+        resolver: resolve
+      }; // console.log('addObserver ____1_______:', stData, tData);
+      // start Recheck Observers on next frame
+
+      _waitCheckObservers(); // out.data = layerID;
+      // resolve(out);
+
+    } else {
+      out.error = 'Нет слоя: ' + layerID;
+      resolve(out);
+    }
+  });
+};
+
+var removeObserver = function removeObserver(pars) {
+  var host = hosts[pars.hostName];
+
+  if (host && host.ids[pars.layerID]) {
+    var observers = host.ids[pars.layerID].observers;
+
+    if (observers) {
+      observers[pars.zKey].resolver([]);
+      delete observers[pars.zKey];
+    }
+  }
+
+  console.log('removeObserver _______________:', pars, hosts);
 };
 
 var setDateInterval = function setDateInterval(pars) {
@@ -1222,6 +1564,8 @@ var getMapTree = function getMapTree(pars) {
 };
 
 var DataVersion = {
+  addObserver: addObserver,
+  removeObserver: removeObserver,
   getMapTree: getMapTree,
   setDateInterval: setDateInterval,
   moveend: moveend,
@@ -1288,6 +1632,19 @@ var _self$1 = self;
         id: message.id,
         hostName: message.hostName
       });
+      break;
+
+    case 'addObserver':
+      DataVersion.addObserver(message).then(function (json) {
+        message.out = json;
+        console.log('vvvvvvvvvv ___res____ ', message);
+
+        _self$1.postMessage(message);
+      });
+      break;
+
+    case 'removeObserver':
+      DataVersion.removeObserver(message);
       break;
 
     case 'setDateInterval':

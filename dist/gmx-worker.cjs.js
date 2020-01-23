@@ -283,6 +283,76 @@ var utils = {
         error: err.toString()
       }; // handler.workerContext.postMessage(out);
     });
+  },
+  geoItemBounds: function geoItemBounds(geo) {
+    // get item bounds array by geometry
+    if (!geo) {
+      return {
+        bounds: null,
+        boundsArr: []
+      };
+    }
+
+    var type = geo.type,
+        coords = geo.coordinates,
+        b = null,
+        i = 0,
+        len = 0,
+        bounds = null,
+        boundsArr = [];
+
+    if (type === 'MULTIPOLYGON' || type === 'MultiPolygon') {
+      bounds = new Bounds();
+
+      for (i = 0, len = coords.length; i < len; i++) {
+        var arr1 = [];
+
+        for (var j = 0, len1 = coords[i].length; j < len1; j++) {
+          b = new Bounds(coords[i][j]);
+          arr1.push(b);
+
+          if (j === 0) {
+            bounds.extendBounds(b);
+          }
+        }
+
+        boundsArr.push(arr1);
+      }
+    } else if (type === 'POLYGON' || type === 'Polygon') {
+      bounds = new Bounds();
+
+      for (i = 0, len = coords.length; i < len; i++) {
+        b = new Bounds(coords[i]);
+        boundsArr.push(b);
+
+        if (i === 0) {
+          bounds.extendBounds(b);
+        }
+      }
+    } else if (type === 'POINT' || type === 'Point') {
+      bounds = new Bounds([coords]);
+    } else if (type === 'MULTIPOINT' || type === 'MultiPoint') {
+      bounds = new Bounds();
+
+      for (i = 0, len = coords.length; i < len; i++) {
+        b = new Bounds([coords[i]]);
+        bounds.extendBounds(b);
+      }
+    } else if (type === 'LINESTRING' || type === 'LineString') {
+      bounds = new Bounds(coords); //boundsArr.push(bounds);
+    } else if (type === 'MULTILINESTRING' || type === 'MultiLineString') {
+      bounds = new Bounds();
+
+      for (i = 0, len = coords.length; i < len; i++) {
+        b = new Bounds(coords[i]);
+        bounds.extendBounds(b); //boundsArr.push(b);
+      }
+    }
+
+    return {
+      bounds: bounds,
+      boundsArr: boundsArr
+    };
   }
 };
 /*
@@ -479,7 +549,134 @@ var chkSignal = function chkSignal(signalName, signals, opt) {
   return opt;
 };
 
+var Bounds = function Bounds(arr) {
+  this.min = {
+    x: Number.MAX_VALUE,
+    y: Number.MAX_VALUE
+  };
+  this.max = {
+    x: -Number.MAX_VALUE,
+    y: -Number.MAX_VALUE
+  };
+  this.extendArray(arr);
+};
+
+Bounds.prototype = {
+  extend: function extend(x, y) {
+    if (x < this.min.x) {
+      this.min.x = x;
+    }
+
+    if (x > this.max.x) {
+      this.max.x = x;
+    }
+
+    if (y < this.min.y) {
+      this.min.y = y;
+    }
+
+    if (y > this.max.y) {
+      this.max.y = y;
+    }
+
+    return this;
+  },
+  extendBounds: function extendBounds(bounds) {
+    return this.extendArray([[bounds.min.x, bounds.min.y], [bounds.max.x, bounds.max.y]]);
+  },
+  extendArray: function extendArray(arr) {
+    if (!arr || !arr.length) {
+      return this;
+    }
+
+    var i, len;
+
+    if (typeof arr[0] === 'number') {
+      for (i = 0, len = arr.length; i < len; i += 2) {
+        this.extend(arr[i], arr[i + 1]);
+      }
+    } else {
+      for (i = 0, len = arr.length; i < len; i++) {
+        this.extend(arr[i][0], arr[i][1]);
+      }
+    }
+
+    return this;
+  },
+  addBuffer: function addBuffer(dxmin, dymin, dxmax, dymax) {
+    this.min.x -= dxmin;
+    this.min.y -= dymin || dxmin;
+    this.max.x += dxmax || dxmin;
+    this.max.y += dymax || dymin || dxmin;
+    return this;
+  },
+  contains: function contains(point) {
+    // ([x, y]) -> Boolean
+    var min = this.min,
+        max = this.max,
+        x = point[0],
+        y = point[1];
+    return x >= min.x && x <= max.x && y >= min.y && y <= max.y;
+  },
+  getCenter: function getCenter() {
+    var min = this.min,
+        max = this.max;
+    return [(min.x + max.x) / 2, (min.y + max.y) / 2];
+  },
+  addOffset: function addOffset(offset) {
+    this.min.x += offset[0];
+    this.max.x += offset[0];
+    this.min.y += offset[1];
+    this.max.y += offset[1];
+    return this;
+  },
+  intersects: function intersects(bounds) {
+    // (Bounds) -> Boolean
+    var min = this.min,
+        max = this.max,
+        min2 = bounds.min,
+        max2 = bounds.max;
+    return max2.x > min.x && min2.x < max.x && max2.y > min.y && min2.y < max.y;
+  },
+  intersectsWithDelta: function intersectsWithDelta(bounds, dx, dy) {
+    // (Bounds, dx, dy) -> Boolean
+    var min = this.min,
+        max = this.max,
+        x = dx || 0,
+        y = dy || 0,
+        min2 = bounds.min,
+        max2 = bounds.max;
+    return max2.x + x > min.x && min2.x - x < max.x && max2.y + y > min.y && min2.y - y < max.y;
+  },
+  isEqual: function isEqual(bounds) {
+    // (Bounds) -> Boolean
+    var min = this.min,
+        max = this.max,
+        min2 = bounds.min,
+        max2 = bounds.max;
+    return max2.x === max.x && min2.x === min.x && max2.y === max.y && min2.y === min.y;
+  },
+  isNodeIntersect: function isNodeIntersect(coords) {
+    for (var i = 0, len = coords.length; i < len; i++) {
+      if (this.contains(coords[i])) {
+        return {
+          num: i,
+          point: coords[i]
+        };
+      }
+    }
+
+    return null;
+  }
+}; // bounds: function(arr) {
+// return new Bounds(arr);
+// },
+
 var Requests = {
+  bounds: function bounds(arr) {
+    return new Bounds(arr);
+  },
+  geoItemBounds: utils.geoItemBounds,
   chkSignal: chkSignal,
   COMPARS: COMPARS,
   setSyncParams: setSyncParams,
@@ -653,6 +850,24 @@ var Utils = {
         dateEnd: Math.floor(dateInterval.endDate.getTime() / 1000)
       });
     });
+  },
+  addObserver: function addObserver(opt) {
+    return new Promise(function (resolve) {
+      dataWorker.onmessage = function (res) {
+        console.log('addObserver___res____ ', res);
+
+        if (res.data.cmd === 'addObserver') {
+          resolve(res.data);
+        }
+      };
+
+      opt.cmd = 'addObserver';
+      dataWorker.postMessage(opt);
+    });
+  },
+  removeObserver: function removeObserver(opt) {
+    opt.cmd = 'removeObserver';
+    dataWorker.postMessage(opt);
   },
   getMap: function getMap(opt) {
     opt = opt || {};

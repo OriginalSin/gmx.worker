@@ -86,6 +86,7 @@ let hosts = {},
 	intervalID = null,
     timeoutID = null;
 
+
 const utils = {
     now: function() {
 		if (timeoutID) { clearTimeout(timeoutID); }
@@ -461,9 +462,9 @@ const chkVersion = () => {
 						pt.tilesOrder = it.tilesOrder;
 						// pt.tilesPromise = 
 						TilesLoader.load(pt);
-						Promise.all(Object.values(pt.tilesPromise)).then((res) => {
-				console.log('tilesPromise ___:', hosts, res);
-						});
+						// Promise.all(Object.values(pt.tilesPromise)).then((res) => {
+				// console.log('tilesPromise ___:', hosts, res);
+						// });
 
 						// pt.tilesPromise.then(res => {
 				// console.log('tilesPromise ___:', hosts, res);
@@ -566,6 +567,120 @@ console.log('moveend:', pars);
 	utils.now();
 	return;
 };
+
+let _checkObserversTimer = null;
+const _waitCheckObservers = () => {
+	if (_checkObserversTimer) { clearTimeout(_checkObserversTimer); }
+	_checkObserversTimer = setTimeout(checkObservers, 25);
+};
+/*
+const chkTiles = (opt) => {
+	let	arr = [],
+		tcnt = 0,
+		pars = opt.observer.pars,
+		// dateInterval = pars.dateInterval,
+		obbox = pars.bbox;
+	for (let i = 0, len = opt.tiles.length; i < len; i++) {
+		let tile = opt.tiles[i],
+			bbox = tile.bbox;
+		if (bbox[0] > obbox.max.x || bbox[2] < obbox.min.x || bbox[1] > obbox.max.y || bbox[3] < obbox.min.y) {continue;}
+		tcnt++;
+	}
+console.log('chkTiles _1______________:', tcnt, pars.zKey, opt); //, tile.z, tile.x, tile.y, tile.span, tile.level);
+	return arr;
+
+};
+*/
+const getStyleNum = (arr, styles, indexes, z) => {
+	let out = -1;
+	
+};
+
+const checkObservers = () => {
+	console.log('checkObservers _______________:', hosts);
+	Object.keys(hosts).forEach(host => {
+		Object.keys(hosts[host].ids).forEach(layerID => {
+			let	tData = hosts[host].ids[layerID],
+				layerData = hosts[host].parseLayers.layersByID[layerID],
+				styles = layerData.styles || [],
+				oKeys = Object.keys(tData.observers),
+				tilesPromise = tData.tilesPromise;
+			if (tilesPromise) {
+				Promise.all(Object.values(tilesPromise)).then((arrTiles) => {
+					for (let i = 0, len = arrTiles.length; i < len; i++) {
+						let tile = arrTiles[i],
+							styleNums = tile.styleNums,
+							itemsbounds = tile.itemsbounds;
+						if (!styleNums) {styleNums = tile.styleNums = [];}
+						if (!itemsbounds) {itemsbounds = tile.itemsbounds = [];}
+						for (let j = 0, len1 = oKeys.length; j < len1; j++) {
+							let zKey = oKeys[j],
+								observer = tData.observers[zKey];
+
+							if (!observer || !observer.bounds.intersects(tile.bounds)) {continue;}
+
+							if (!observer.tcnt) {observer.tcnt = 0;}
+							observer.tcnt++;
+							observer.items = [];
+							tile.values.forEach((it, n) => {
+								let geo = it[it.length - 1],
+									st = styleNums[n],
+									bounds = itemsbounds[n];
+								if (st === undefined) {st = styleNums[n] = getStyleNum(it, styles, tData.tileAttributeIndexes, observer.pars.z);}
+								if (!bounds) {bounds = itemsbounds[n] = Requests.geoItemBounds(geo);}
+
+								observer.items.push(it);
+							});
+						}
+					}
+		console.log('checkObservers _____1__________:', hosts);
+				});
+			}
+		});
+	});
+};
+
+const addObserver = (pars) => {
+
+console.log('addObserver_______________:', pars, hosts);
+	return new Promise((resolve) => {
+		let layerID = pars.layerID,
+			zKey = pars.zKey,
+			host = hosts[pars.hostName || HOST],
+			out = {};
+		if (host && host.parseLayers.layersByID[layerID]) {
+			// let stData = host.parseLayers.layersByID[layerID],
+			let	tData = host.ids[layerID];
+			if (!tData.observers) { tData.observers = {}; }
+			tData.observers[zKey] = {
+				bounds: Requests.bounds().extendBounds(pars.bbox),
+				pars: pars,
+				resolver: resolve
+			};
+// console.log('addObserver ____1_______:', stData, tData);
+			// start Recheck Observers on next frame
+			_waitCheckObservers();
+			// out.data = layerID;
+			// resolve(out);
+		} else {
+			out.error = 'Нет слоя: ' + layerID;
+			resolve(out);
+		}
+	});
+};
+
+const removeObserver = (pars) => {
+	let host = hosts[pars.hostName];
+	if (host && host.ids[pars.layerID]) {
+		let observers = host.ids[pars.layerID].observers;
+		if (observers) {
+			observers[pars.zKey].resolver([]);
+			delete observers[pars.zKey];
+		}
+	}
+console.log('removeObserver _______________:', pars, hosts);
+};
+
 const setDateInterval = (pars) => {
 	pars = pars || {};
 	let host = hosts[pars.hostName];
@@ -656,6 +771,8 @@ const getMapTree = (pars) => {
 };
 
 export default {
+	addObserver,
+	removeObserver,
 	getMapTree,
 	setDateInterval,
 	moveend,

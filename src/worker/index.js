@@ -39,6 +39,16 @@ console.log('message ', e);
 		case 'removeDataSource':
 			DataVersion.removeSource({id: message.id, hostName: message.hostName});
 			break;
+		case 'addObserver':
+			DataVersion.addObserver(message).then((json) => {
+				message.out = json;
+		console.log('vvvvvvvvvv ___res____ ', message);
+				_self.postMessage(message);
+			});
+			break;
+		case 'removeObserver':
+			DataVersion.removeObserver(message);
+			break;
 		case 'setDateInterval':
 			DataVersion.setDateInterval(message);
 			break;

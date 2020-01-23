@@ -36,6 +36,7 @@ const load = (pars) => {
 							json = JSON.parse(json.substr(0, json.length -1));
 						}
 					}
+					json.bounds = Requests.bounds(json.bbox);
 					return json;
 				})
 				.catch(err => {

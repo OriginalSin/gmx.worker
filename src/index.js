@@ -134,6 +134,20 @@ const Utils = {
 			});
 		});
 	},
+	addObserver: (opt) => {
+		return new Promise((resolve) => {
+			dataWorker.onmessage = (res) => {
+		console.log('addObserver___res____ ', res);
+				if (res.data.cmd === 'addObserver') { resolve(res.data); }
+			};
+			opt.cmd = 'addObserver';
+			dataWorker.postMessage(opt);
+		});
+	},
+	removeObserver: (opt) => {
+		opt.cmd = 'removeObserver';
+		dataWorker.postMessage(opt);
+	},
 	getMap: (opt) => {
 		opt = opt || {};
         return new Promise((resolve) => {
