@@ -24,7 +24,7 @@ function createURLWorkerFactory(url) {
 }
 
 /* eslint-disable */
-var WorkerFactory = createURLWorkerFactory('geomixer/external/gmx.worker/dist/web-worker-0.js');
+var WorkerFactory = createURLWorkerFactory('/api5/' + 'geomixer/external/gmx.worker/dist/web-worker-0.js');
 /* eslint-enable */
 
 var _self = self || window; // serverBase = _self.serverBase || 'maps.kosmosnimki.ru/',
@@ -697,6 +697,26 @@ var Requests = {
 var dataWorker = new WorkerFactory();
 var urlPars = Requests.parseURLParams();
 console.log('urlPars', urlPars);
+var reqNeedResolve = {};
+
+dataWorker.onmessage = function (res) {
+  var data = res.data,
+      code = data.code,
+      pt = reqNeedResolve[code],
+      json = data.out; // console.log('onmessage _____________', code, res);
+
+  if (pt && pt.resolve) {
+    if (data.bitmap) {
+      json.bitmap = data.bitmap;
+    } // console.log('resolve _____________', json);
+
+
+    pt.resolve(json); // console.log('resolve 1 _____________', json);
+
+    delete reqNeedResolve[code];
+  }
+};
+
 var WORLDWIDTHFULL = 40075016.685578496,
     W = WORLDWIDTHFULL / 2,
     // WORLDBBOX = JSON.stringify([[-W, -W, W, W]]);
@@ -805,13 +825,11 @@ var Utils = {
     return out; // return JSON.stringify(out);
   },
   setSyncParams: function setSyncParams(syncParams) {
-    syncParams = syncParams || {};
-
-    dataWorker.onmessage = function (res) {
-      if (res.data.cmd === 'setSyncParams') {
-        console.log('onmessage setSyncParams ', res);
-      }
-    };
+    syncParams = syncParams || {}; // dataWorker.onmessage = (res) => {
+    // if (res.data.cmd === 'setSyncParams') {
+    // console.log('onmessage setSyncParams ', res);
+    // }
+    // };
 
     dataWorker.postMessage({
       cmd: 'setSyncParams',
@@ -819,14 +837,13 @@ var Utils = {
     });
   },
   getSyncParams: function getSyncParams(stringFlag) {
-    return new Promise(function (resolve) {
-      dataWorker.onmessage = function (res) {
-        if (res.data.cmd === 'getSyncParams') {
-          resolve(res.data.syncParams);
-          console.log('onmessage getSyncParams ', res);
-        }
-      };
-
+    return new Promise(function () {
+      // dataWorker.onmessage = (res) => {
+      // if (res.data.cmd === 'getSyncParams') {
+      // resolve(res.data.syncParams);
+      // console.log('onmessage getSyncParams ', res);
+      // }
+      // };
       dataWorker.postMessage({
         cmd: 'getSyncParams',
         stringFlag: stringFlag
@@ -835,13 +852,10 @@ var Utils = {
   },
   setDateInterval: function setDateInterval(dateInterval, id, hostName) {
     console.log('setDateInterval', dateInterval, id, hostName);
-    return new Promise(function (resolve) {
-      dataWorker.onmessage = function (res) {
-        if (res.data.cmd === 'setDateInterval') {
-          resolve(res.data);
-        }
-      };
-
+    return new Promise(function () {
+      // dataWorker.onmessage = (res) => {
+      // if (res.data.cmd === 'setDateInterval') { resolve(res.data); }
+      // };
       dataWorker.postMessage({
         cmd: 'setDateInterval',
         id: id,
@@ -851,16 +865,38 @@ var Utils = {
       });
     });
   },
-  addObserver: function addObserver(opt) {
+  getTiles: function getTiles(opt) {
+    var code = 'getTiles_' + JSON.stringify(opt.coords || {});
     return new Promise(function (resolve) {
-      dataWorker.onmessage = function (res) {
-        console.log('addObserver___res____ ', res);
-
-        if (res.data.cmd === 'addObserver') {
-          resolve(res.data);
-        }
+      reqNeedResolve[code] = {
+        resolve: resolve
       };
+      opt.code = code;
+      opt.cmd = 'getTiles';
+      dataWorker.postMessage(opt);
+    });
+  },
+  addCanvasTile: function addCanvasTile(opt) {
+    var code = 'addCanvasTile_' + JSON.stringify(opt.coords || {});
+    return new Promise(function (resolve) {
+      reqNeedResolve[code] = {
+        resolve: resolve
+      }; // dataWorker.onmessage = (res) => {
+      // console.log('addObserver___res____ ', res);
+      // if (res.data.cmd === 'addObserver') { resolve(res.data); }
+      // };
 
+      opt.code = code;
+      opt.cmd = 'addCanvasTile';
+      dataWorker.postMessage(opt); // dataWorker.postMessage(opt, [opt.canvas]);
+    });
+  },
+  addObserver: function addObserver(opt) {
+    return new Promise(function () {
+      // dataWorker.onmessage = (res) => {
+      // console.log('addObserver___res____ ', res);
+      // if (res.data.cmd === 'addObserver') { resolve(res.data); }
+      // };
       opt.cmd = 'addObserver';
       dataWorker.postMessage(opt);
     });
@@ -872,21 +908,23 @@ var Utils = {
   getMap: function getMap(opt) {
     opt = opt || {};
     return new Promise(function (resolve) {
-      var mapID = urlPars.main.length ? urlPars.main[0] : opt.mapID; // let mapID = urlPars.main.length ? urlPars.main[0] : opt.mapID, hostName: opt.hostName, search: location.search});
+      var mapID = urlPars.main.length ? urlPars.main[0] : opt.mapID,
+          code = 'getMap_' + mapID; // let mapID = urlPars.main.length ? urlPars.main[0] : opt.mapID, hostName: opt.hostName, search: location.search});
+      // dataWorker.onmessage = (res) => {
+      // let data = res.data,
+      // cmd = data.cmd,
+      // json = data.out;
+      // if (cmd === 'getMap') {
+      // resolve(json);
+      // }
+      // console.log('getMap _____________', json);
+      // };
 
-      dataWorker.onmessage = function (res) {
-        var data = res.data,
-            cmd = data.cmd,
-            json = data.out;
-
-        if (cmd === 'getMap') {
-          resolve(json);
-        }
-
-        console.log('getMap _____________', json);
+      reqNeedResolve[code] = {
+        resolve: resolve
       };
-
       dataWorker.postMessage({
+        code: code,
         cmd: 'getMap',
         mapID: mapID
       });
@@ -939,16 +977,14 @@ L.Map.addInitHook(function () {
       console.log('layeradd styles', arr, Utils.getStyleAtlas(arr));
       return new Promise(function (resolve) {
         if (_gmx) {
-          dataWorker.onmessage = function (res) {
-            var data = res.data,
-                cmd = data.cmd,
-                json = data.out;
-
-            if (cmd === 'addDataSource') {
-              resolve(json);
-            }
-          };
-
+          // dataWorker.onmessage = (res) => {
+          // let data = res.data,
+          // cmd = data.cmd,
+          // json = data.out;
+          // if (cmd === 'addDataSource') {
+          // resolve(json);
+          // }
+          // };
           dataWorker.postMessage(pars);
           dm.on('onDateInterval', function (ev) {
             Utils.setDateInterval({
@@ -975,16 +1011,14 @@ L.Map.addInitHook(function () {
         _gmx = it._gmx;
     return new Promise(function (resolve) {
       if (_gmx) {
-        dataWorker.onmessage = function (res) {
-          var data = res.data,
-              cmd = data.cmd,
-              json = data.out;
-
-          if (cmd === 'removeDataSource') {
-            resolve(json);
-          }
-        };
-
+        // dataWorker.onmessage = (res) => {
+        // let data = res.data,
+        // cmd = data.cmd,
+        // json = data.out;
+        // if (cmd === 'removeDataSource') {
+        // resolve(json);
+        // }
+        // };
         dataWorker.postMessage({
           cmd: 'removeDataSource',
           id: _gmx.layerID,
@@ -996,10 +1030,43 @@ L.Map.addInitHook(function () {
         });
       }
     });
-  });
-  Utils.getMap().then('cccccccccccccc', console.log);
+  }); // Utils.getMap({mapID: 'G1XRF'})
+  // .then((res) => {
+  // console.log('sss', res);
+  // });
+
+  /*
+  	var htmlCanvas = L.DomUtil.create("canvas", 'htmlCanvas');
+  	htmlCanvas.width = htmlCanvas.height = 256;
+  	document.body.appendChild(htmlCanvas);
+  	
+  	var offscreen = htmlCanvas.transferControlToOffscreen();
+  
+  	// var worker = new Worker("offscreencanvas.js"); 
+  	L.dataWorker.postMessage({
+  		cmd: 'testCanvas',
+  		canvas: offscreen,
+  		_parts: [[{"x":54,"y":4},{"x":95,"y":40},{"x":95,"y":88}]],
+  		options: {
+  			fillRule: 'evenodd',
+  			_dashArray: null,
+  			lineCap: "butt",
+  			lineJoin: "round",
+  			color: "green",
+  			fillColor: "blue",
+  			interactive: true,
+  			smoothFactor: 1,
+  			weight: 10,
+  			opacity: 1,
+  			fillOpacity: 1,
+  			stroke: true,
+  			fill: false
+  		}
+  	}, [offscreen]);
+  */
 });
 L.gmxWorker = Utils;
+L.dataWorker = dataWorker;
 
 exports.Utils = Utils;
 exports.dataWorker = dataWorker;

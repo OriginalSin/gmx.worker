@@ -6,6 +6,24 @@ const dataWorker = new DataWorker();
 const urlPars = Requests.parseURLParams();
 		console.log('urlPars', urlPars);
 
+let reqNeedResolve = {};
+dataWorker.onmessage = (res) => {
+	let data = res.data,
+		code = data.code,
+		pt = reqNeedResolve[code],
+		json = data.out;
+// console.log('onmessage _____________', code, res);
+	if (pt && pt.resolve) {
+		if (data.bitmap) {
+			json.bitmap = data.bitmap;
+		}
+// console.log('resolve _____________', json);
+		pt.resolve(json);
+// console.log('resolve 1 _____________', json);
+		delete reqNeedResolve[code];
+	}
+};
+
 const WORLDWIDTHFULL = 40075016.685578496,
 	W = WORLDWIDTHFULL / 2,
 	// WORLDBBOX = JSON.stringify([[-W, -W, W, W]]);
@@ -100,31 +118,31 @@ const Utils = {
 
 	setSyncParams: (syncParams) => {
 		syncParams = syncParams || {};
-		dataWorker.onmessage = (res) => {
-			if (res.data.cmd === 'setSyncParams') {
-				console.log('onmessage setSyncParams ', res);
-			}
-		};
+		// dataWorker.onmessage = (res) => {
+			// if (res.data.cmd === 'setSyncParams') {
+				// console.log('onmessage setSyncParams ', res);
+			// }
+		// };
 		dataWorker.postMessage({cmd: 'setSyncParams', syncParams: syncParams});
 	},
 	getSyncParams: (stringFlag) => {
-        return new Promise((resolve) => {
-			dataWorker.onmessage = (res) => {
-				if (res.data.cmd === 'getSyncParams') {
-					resolve(res.data.syncParams);
-					console.log('onmessage getSyncParams ', res);
-				}
-			};
+        return new Promise(() => {
+			// dataWorker.onmessage = (res) => {
+				// if (res.data.cmd === 'getSyncParams') {
+					// resolve(res.data.syncParams);
+					// console.log('onmessage getSyncParams ', res);
+				// }
+			// };
 			dataWorker.postMessage({cmd: 'getSyncParams', stringFlag: stringFlag});
 		});
 	},
 	setDateInterval: (dateInterval, id, hostName) => {
 		console.log('setDateInterval', dateInterval, id, hostName)
 
-		return new Promise((resolve) => {
-			dataWorker.onmessage = (res) => {
-				if (res.data.cmd === 'setDateInterval') { resolve(res.data); }
-			};
+		return new Promise(() => {
+			// dataWorker.onmessage = (res) => {
+				// if (res.data.cmd === 'setDateInterval') { resolve(res.data); }
+			// };
 			dataWorker.postMessage({
 				cmd: 'setDateInterval',
 				id: id,
@@ -134,12 +152,35 @@ const Utils = {
 			});
 		});
 	},
-	addObserver: (opt) => {
+	getTiles: (opt) => {
+		let code = 'getTiles_' + JSON.stringify(opt.coords || {});
 		return new Promise((resolve) => {
-			dataWorker.onmessage = (res) => {
-		console.log('addObserver___res____ ', res);
-				if (res.data.cmd === 'addObserver') { resolve(res.data); }
-			};
+			reqNeedResolve[code] = {resolve: resolve};
+			opt.code = code;
+			opt.cmd = 'getTiles';
+			dataWorker.postMessage(opt);
+		});
+	},
+	addCanvasTile: (opt) => {
+		let code = 'addCanvasTile_' + JSON.stringify(opt.coords || {});
+		return new Promise((resolve) => {
+			reqNeedResolve[code] = {resolve: resolve};
+			// dataWorker.onmessage = (res) => {
+		// console.log('addObserver___res____ ', res);
+				// if (res.data.cmd === 'addObserver') { resolve(res.data); }
+			// };
+			opt.code = code;
+			opt.cmd = 'addCanvasTile';
+			dataWorker.postMessage(opt);
+			// dataWorker.postMessage(opt, [opt.canvas]);
+		});
+	},
+	addObserver: (opt) => {
+		return new Promise(() => {
+			// dataWorker.onmessage = (res) => {
+		// console.log('addObserver___res____ ', res);
+				// if (res.data.cmd === 'addObserver') { resolve(res.data); }
+			// };
 			opt.cmd = 'addObserver';
 			dataWorker.postMessage(opt);
 		});
@@ -151,20 +192,24 @@ const Utils = {
 	getMap: (opt) => {
 		opt = opt || {};
         return new Promise((resolve) => {
-			let mapID = urlPars.main.length ? urlPars.main[0] : opt.mapID;
+			let mapID = urlPars.main.length ? urlPars.main[0] : opt.mapID,
+				code = 'getMap_' + mapID;
 			// let mapID = urlPars.main.length ? urlPars.main[0] : opt.mapID, hostName: opt.hostName, search: location.search});
 
-			dataWorker.onmessage = (res) => {
-				let data = res.data,
-					cmd = data.cmd,
-					json = data.out;
+			// dataWorker.onmessage = (res) => {
+				// let data = res.data,
+					// cmd = data.cmd,
+					// json = data.out;
 
-				if (cmd === 'getMap') {
-					resolve(json);
-				}
-		console.log('getMap _____________', json);
-			};
+				// if (cmd === 'getMap') {
+					// resolve(json);
+				// }
+		// console.log('getMap _____________', json);
+			// };
+			
+			reqNeedResolve[code] = {resolve: resolve};
 			dataWorker.postMessage({
+				code: code,
 				cmd: 'getMap',
 				mapID: mapID
 			});
@@ -216,15 +261,15 @@ console.log('layeradd styles', arr, Utils.getStyleAtlas(arr));
 
 				return new Promise((resolve) => {
 					if (_gmx) {
-						dataWorker.onmessage = (res) => {
-							let data = res.data,
-								cmd = data.cmd,
-								json = data.out;
+						// dataWorker.onmessage = (res) => {
+							// let data = res.data,
+								// cmd = data.cmd,
+								// json = data.out;
 
-							if (cmd === 'addDataSource') {
-								resolve(json);
-							}
-						};
+							// if (cmd === 'addDataSource') {
+								// resolve(json);
+							// }
+						// };
 						dataWorker.postMessage(pars);
 						dm.on('onDateInterval', (ev) => {
 							Utils.setDateInterval({beginDate: ev.beginDate, endDate: ev.endDate}, id, hostName);
@@ -250,26 +295,57 @@ console.log('layeradd styles', arr, Utils.getStyleAtlas(arr));
 
 			return new Promise((resolve) => {
 				if (_gmx) {
-					dataWorker.onmessage = (res) => {
-						let data = res.data,
-							cmd = data.cmd,
-							json = data.out;
+					// dataWorker.onmessage = (res) => {
+						// let data = res.data,
+							// cmd = data.cmd,
+							// json = data.out;
 
-						if (cmd === 'removeDataSource') {
-							resolve(json);
-						}
-					};
+						// if (cmd === 'removeDataSource') {
+							// resolve(json);
+						// }
+					// };
 					dataWorker.postMessage({cmd: 'removeDataSource', id: _gmx.layerID, hostName: _gmx.hostName});
 				} else {
 					resolve({error: 'Not Geomixer layer'});
 				}
 			});
 		});
-	Utils.getMap()
-		.then('cccccccccccccc', console.log)
+	// Utils.getMap({mapID: 'G1XRF'})
+		// .then((res) => {
+			// console.log('sss', res);
+		// });
+/*
+	var htmlCanvas = L.DomUtil.create("canvas", 'htmlCanvas');
+	htmlCanvas.width = htmlCanvas.height = 256;
+	document.body.appendChild(htmlCanvas);
+	
+	var offscreen = htmlCanvas.transferControlToOffscreen();
 
+	// var worker = new Worker("offscreencanvas.js"); 
+	L.dataWorker.postMessage({
+		cmd: 'testCanvas',
+		canvas: offscreen,
+		_parts: [[{"x":54,"y":4},{"x":95,"y":40},{"x":95,"y":88}]],
+		options: {
+			fillRule: 'evenodd',
+			_dashArray: null,
+			lineCap: "butt",
+			lineJoin: "round",
+			color: "green",
+			fillColor: "blue",
+			interactive: true,
+			smoothFactor: 1,
+			weight: 10,
+			opacity: 1,
+			fillOpacity: 1,
+			stroke: true,
+			fill: false
+		}
+	}, [offscreen]);
+*/
 });
 
 L.gmxWorker = Utils;
+L.dataWorker = dataWorker;
 
 export {dataWorker, Utils};

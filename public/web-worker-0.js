@@ -756,6 +756,180 @@ var TilesLoader = {
   load: load
 };
 
+// const HOST = 'maps.kosmosnimki.ru';
+// let hosts = {},
+// zoom = 3,
+// bbox = null,
+// dataManagersLinks = {},
+// hostBusy = {},
+// needReq = {}
+// delay = 60000,
+// intervalID = null,
+// timeoutID = null;
+// ph = {
+// ctx: - 2d canvas контекст
+// bounds: - bounds операции
+// w: - canvas.width
+// h: - canvas.height
+// canvas: - canvas
+// }
+var _reqParse = function _reqParse(ph) {
+  ph = ph || {};
+
+  if (ph.canvas) {
+    ph._ctx = ph._ctx || ph.canvas.getContext('2d');
+    ph.w = ph.w || ph.canvas.width;
+    ph.h = ph.h || ph.canvas.height;
+  }
+
+  return ph;
+};
+
+var utils$1 = {
+  _clear: function _clear(ph) {
+    ph = _reqParse(ph);
+
+    if (ph.bounds) {
+      var size = ph.bounds.getSize();
+
+      ph._ctx.clearRect(ph.bounds.min.x, ph.bounds.min.y, size.x, size.y);
+    } else {
+      ph._ctx.save();
+
+      ph._ctx.setTransform(1, 0, 0, 1, 0, 0);
+
+      ph._ctx.clearRect(0, 0, ph.w, ph.h);
+
+      ph._ctx.restore();
+    }
+  },
+  _draw: function _draw(ph) {
+    ph = _reqParse(ph); // var layer, bounds = this._redrawBounds;
+
+    ph._ctx.save();
+
+    if (ph.bounds) {
+      var size = ph.bounds.getSize();
+
+      ph._ctx.beginPath();
+
+      ph._ctx.rect(ph.bounds.min.x, ph.bounds.min.y, size.x, size.y);
+
+      ph._ctx.clip();
+    }
+
+    ph._drawing = true;
+
+    for (var order = ph._drawFirst; order; order = order.next) {
+      var layer = order.layer;
+
+      if (!ph.bounds || layer._pxBounds && layer._pxBounds.intersects(ph.bounds)) ;
+    }
+
+    ph._drawing = false;
+
+    ph._ctx.restore(); // Restore state before clipping.
+
+  },
+  _updatePoly: function _updatePoly(ph) {
+    // _updatePoly: function (layer, closed) {
+    ph = _reqParse(ph);
+
+    if (!ph._drawing) {
+      return;
+    }
+
+    var i,
+        j,
+        len2,
+        p,
+        // coords = ph.coords,
+    parts = ph._parts,
+        len = parts.length,
+        ctx = ph._ctx;
+
+    if (!len) {
+      return;
+    }
+
+    ctx.beginPath();
+
+    for (i = 0; i < len; i++) {
+      for (j = 0, len2 = parts[i].length; j < len2; j++) {
+        p = parts[i][j];
+        ctx[j ? 'lineTo' : 'moveTo'](p.x, p.y);
+      }
+
+      if (ph.closed) {
+        ctx.closePath();
+      }
+    } // ctx.strokeText(coords.z + '.' + coords.x + '.' + coords.y, 150, 150);
+
+
+    utils$1._fillStroke(ph); // TODO optimization: 1 fill/stroke for all features with equal style instead of 1 for each feature
+
+  },
+  _updateCircle: function _updateCircle(ph) {
+    // _updateCircle: function (layer) {
+    ph = _reqParse(ph);
+
+    if (!ph._drawing || !ph._point) {
+      return;
+    }
+
+    var p = ph._point,
+        ctx = ph._ctx,
+        r = Math.max(Math.round(ph._radius), 1),
+        s = (Math.max(Math.round(ph._radiusY), 1) || r) / r;
+
+    if (s !== 1) {
+      ctx.save();
+      ctx.scale(1, s);
+    }
+
+    ctx.beginPath();
+    ctx.arc(p.x, p.y / s, r, 0, Math.PI * 2, false);
+
+    if (s !== 1) {
+      ctx.restore();
+    }
+
+    utils$1._fillStroke(ph);
+  },
+  _fillStroke: function _fillStroke(ph) {
+    // _fillStroke: function (ctx, layer) {
+    ph = _reqParse(ph);
+    var options = ph.options,
+        ctx = ph._ctx;
+
+    if (options.fill) {
+      ctx.globalAlpha = options.fillOpacity;
+      ctx.fillStyle = options.fillColor || options.color;
+      ctx.fill(options.fillRule || 'evenodd');
+    }
+
+    if (options.stroke && options.weight !== 0) {
+      if (ctx.setLineDash) {
+        ctx.setLineDash(options && options._dashArray || []);
+      }
+
+      ctx.globalAlpha = options.opacity;
+      ctx.lineWidth = options.weight;
+      ctx.strokeStyle = options.color;
+      ctx.lineCap = options.lineCap;
+      ctx.lineJoin = options.lineJoin;
+      ctx.stroke();
+    }
+  }
+};
+var Renderer2d = {
+  draw: utils$1._draw,
+  updatePoly: utils$1._updatePoly,
+  updateCircle: utils$1._updateCircle,
+  fillStroke: utils$1._fillStroke,
+  clear: utils$1._clear
+};
+
 var HOST = 'maps.kosmosnimki.ru',
     WORLDWIDTHFULL = 40075016.685578496,
     W = WORLDWIDTHFULL / 2,
@@ -791,7 +965,116 @@ var hosts = {},
 delay = 60000,
     intervalID = null,
     timeoutID = null;
-var utils$1 = {
+var utils$2 = {
+  getCoordsPixels: function getCoordsPixels(attr) {
+    var coords = attr.coords,
+        z = attr.z,
+        tpx = attr.tpx,
+        tpy = attr.tpy,
+        hiddenLines = attr.hiddenLines || [],
+        pixels = [],
+        mInPixel = Math.pow(2, z + 8) / WORLDWIDTHFULL;
+    /*
+    ,
+             hash = {
+                 // gmx: gmx,
+    	// topLeft: attr.topLeft,
+                 tpx: tpx,
+                 tpy: tpy,
+                 coords: null,
+                 hiddenLines: null
+             };
+    */
+
+    for (var j = 0, len = coords.length; j < len; j++) {
+      // var coords1 = coords[j],
+      // hiddenLines1 = hiddenLines[j] || [],
+      // pixels1 = [], hidden1 = [];
+      coords[j].forEach(function (ringMerc) {
+        var res = utils$2.getRingPixels({
+          ringMerc: ringMerc,
+          tpx: tpx,
+          tpy: tpy,
+          mInPixel: mInPixel,
+          hiddenLines: hiddenLines
+        });
+        pixels.push(res.pixels); // var tt = res;
+      });
+      /*
+               for (var j1 = 0, len1 = coords1.length; j1 < len1; j1++) {
+                   hash.ringMerc = coords1[j1];
+                   hash.hiddenLines = hiddenLines1[j1] || [];
+                   var res = utils.getRingPixels(hash);
+                   pixels1.push(res.coords);
+                   hidden1.push(res.hidden);
+                   if (res.hidden) {
+                       hiddenFlag = true;
+                   }
+               }
+               pixels.push(pixels1);
+               hidden.push(hidden1);
+      */
+    }
+
+    console.log('aaaaaaaaaa', pixels, tpx, tpy);
+    return {
+      coords: pixels,
+      hidden:  null,
+      z: z
+    };
+  },
+  getRingPixels: function getRingPixels(_ref) {
+    var ringMerc = _ref.ringMerc,
+        tpx = _ref.tpx,
+        tpy = _ref.tpy,
+        mInPixel = _ref.mInPixel,
+        hiddenLines = _ref.hiddenLines;
+    console.log('getRingPixels', ringMerc, tpx, tpy);
+
+    if (ringMerc.length === 0) {
+      return null;
+    }
+
+    var cnt = 0,
+        cntHide = 0,
+        lastX = null,
+        lastY = null,
+        vectorSize = typeof ringMerc[0] === 'number' ? 2 : 1,
+        pixels = [],
+        hidden = [];
+
+    for (var i = 0, len = ringMerc.length; i < len; i += vectorSize) {
+      var lineIsOnEdge = false;
+
+      if (hiddenLines && i === hiddenLines[cntHide]) {
+        lineIsOnEdge = true;
+        cntHide++;
+      }
+
+      var c = vectorSize === 1 ? ringMerc[i] : [ringMerc[i], ringMerc[i + 1]],
+          x1 = Math.round(c[0] * mInPixel),
+          y1 = Math.round(c[1] * mInPixel),
+          x2 = Math.round(x1 - tpx),
+          y2 = Math.round(tpy - y1);
+
+      if (lastX !== x2 || lastY !== y2) {
+        lastX = x2;
+        lastY = y2;
+
+        if (lineIsOnEdge) {
+          hidden.push(cnt);
+        }
+
+        pixels[cnt++] = x1;
+        pixels[cnt++] = y1;
+      }
+    }
+
+    return {
+      pixels: pixels,
+      hidden: hidden.length ? hidden : null
+    };
+  },
   now: function now() {
     if (timeoutID) {
       clearTimeout(timeoutID);
@@ -815,7 +1098,7 @@ var utils$1 = {
       delay = msec;
     }
 
-    utils$1.stop();
+    utils$2.stop();
     intervalID = setInterval(chkVersion, delay);
   },
 
@@ -855,7 +1138,7 @@ var utils$1 = {
   // var pt = {
   // Name: it.Name || '',
   // type: type || '',
-  legend: false,
+  // legend: false,
   // MinZoom: it.MinZoom || 0,
   // MaxZoom: it.MaxZoom || 18
   // };
@@ -970,36 +1253,106 @@ var utils$1 = {
     		};
     */
   },
-  parseStyles: function parseStyles(prop) {
-    var styles = prop.styles || [],
-        // attr = prop.tileAttributeIndexes,
-    out = styles.map(function (it) {
-      return new Promise(function (resolve) {
-        var data = utils$1.parseFilter(it.Filter || ''),
-            renderStyle = it.RenderStyle; // iconUrl = renderStyle.iconUrl || (renderStyle.marker && renderStyle.marker.image);
+  getTileBounds: function getTileBounds(x, y, z) {
+    //x, y, z - GeoMixer tile coordinates
+    var tileSize = WORLDWIDTHFULL / Math.pow(2, z),
+        minx = x * tileSize,
+        miny = y * tileSize;
+    return Requests.bounds([[minx, miny], [minx + tileSize, miny + tileSize]]);
+  },
+  getTileNumFromLeaflet: function getTileNumFromLeaflet(tilePoint, zoom) {
+    if ('z' in tilePoint) {
+      zoom = tilePoint.z;
+    }
 
+    var pz = Math.pow(2, zoom),
+        tx = tilePoint.x % pz + (tilePoint.x < 0 ? pz : 0),
+        ty = tilePoint.y % pz + (tilePoint.y < 0 ? pz : 0);
+    return {
+      z: zoom,
+      x: tx % pz - pz / 2,
+      y: pz / 2 - 1 - ty % pz
+    };
+  },
+  _getMaxStyleSize: function _getMaxStyleSize(zoom, styles) {
+    // estimete style size for arbitrary object
+    var maxSize = 0;
+
+    for (var i = 0, len = styles.length; i < len; i++) {
+      var style = styles[i];
+
+      if (zoom > style.MaxZoom || zoom < style.MinZoom) {
+        continue;
+      }
+
+      var RenderStyle = style.RenderStyle;
+
+      if (this._needLoadIcons || !RenderStyle || !('maxSize' in RenderStyle)) {
+        maxSize = 128;
+        break;
+      }
+
+      var maxShift = 0;
+
+      if ('iconAnchor' in RenderStyle && !RenderStyle.iconCenter) {
+        maxShift = Math.max(Math.abs(RenderStyle.iconAnchor[0]), Math.abs(RenderStyle.iconAnchor[1]));
+      }
+
+      maxSize = Math.max(RenderStyle.maxSize + maxShift, maxSize);
+    }
+
+    return maxSize;
+  },
+  parseStyles: function parseStyles(prop) {
+    var styles = prop.styles || []; // attr = prop.tileAttributeIndexes,
+    // prop._maxStyleSize = 128;
+
+    prop._maxStyleSize = 0;
+    var out = styles.map(function (it) {
+      return new Promise(function (resolve) {
+        var data = utils$2.parseFilter(it.Filter || ''),
+            renderStyle = it.RenderStyle,
+            iconUrl = renderStyle.iconUrl || renderStyle.marker && renderStyle.marker.image;
         data.MinZoom = it.MinZoom || MINZOOM;
         data.MaxZoom = it.MaxZoom || MAXZOOM;
 
         if (renderStyle) {
-          data.renderStyle = utils$1.decodeOldStyle(renderStyle);
-        } // if (iconUrl) {
-        // Requests.getBitMap(iconUrl).then(blob => {
-        // console.log('dsddd', blob);
-        // createImageBitmap(blob, {
-        // premultiplyAlpha: 'none',
-        // colorSpaceConversion: 'none'
-        // }).then(imageBitmap => {
-        // data.imageBitmap = imageBitmap;
-        // resolve(data);
-        // }).catch(console.warn);
-        // resolve(data);
-        // });
-        // } else {
+          data.renderStyle = utils$2.decodeOldStyle(renderStyle);
+        }
 
+        if (iconUrl) {
+          Requests.getBitMap(iconUrl).then(function (blob) {
+            // .then(function(blob) {
+            // return createImageBitmap(blob, {
+            // premultiplyAlpha: 'none',
+            // colorSpaceConversion: 'none'
+            // });
+            console.log('dsddd', blob);
+            return createImageBitmap(blob, {
+              premultiplyAlpha: 'none',
+              colorSpaceConversion: 'none'
+            }).then(function (imageBitmap) {
+              data.imageBitmap = imageBitmap;
 
-        resolve(data); // }
-        // return data;
+              if (prop._maxStyleSize < imageBitmap.width) {
+                prop._maxStyleSize = imageBitmap.width;
+              }
+
+              if (prop._maxStyleSize < imageBitmap.height) {
+                prop._maxStyleSize = imageBitmap.height;
+              }
+
+              resolve(data);
+            }).catch(console.warn); // resolve(data);
+          });
+        } else {
+          if (prop._maxStyleSize < data.renderStyle.weight) {
+            prop._maxStyleSize = data.renderStyle.weight;
+          }
+
+          resolve(data);
+        } // return data;
+
       });
     });
     return {
@@ -1170,7 +1523,7 @@ var chkVersion = function chkVersion() {
               pt.geometry = it.geometry;
 
               if (!pt.tileAttributeIndexes) {
-                Requests.extend(pt, utils$1.getTileAttributes(props));
+                Requests.extend(pt, utils$2.getTileAttributes(props));
               }
             }
 
@@ -1178,10 +1531,13 @@ var chkVersion = function chkVersion() {
             pt.tiles = it.tiles;
             pt.tilesOrder = it.tilesOrder; // pt.tilesPromise = 
 
-            TilesLoader.load(pt); // Promise.all(Object.values(pt.tilesPromise)).then((res) => {
-            // console.log('tilesPromise ___:', hosts, res);
-            // });
-            // pt.tilesPromise.then(res => {
+            TilesLoader.load(pt);
+            Promise.all(Object.values(pt.tilesPromise)).then(function (res) {
+              //self.postMessage({res: res, host: host, dmID: it.name, cmd: 'TilesData'});
+              console.log('tilesPromise ___:', hosts, res);
+
+              _waitCheckObservers();
+            }); // pt.tilesPromise.then(res => {
             // console.log('tilesPromise ___:', hosts, res);
             // });
             // console.log('chkVersion ___:', pt);
@@ -1241,10 +1597,10 @@ var addSource = function addSource(pars) {
     hosts[hostName].ids[id] = pars;
 
     if (!intervalID) {
-      utils$1.start();
+      utils$2.start();
     }
 
-    utils$1.now();
+    utils$2.now();
   } else {
     console.warn('Warning: Specify layer `id` and `hostName`', pars);
   }
@@ -1254,7 +1610,7 @@ var addSource = function addSource(pars) {
 
     if (parseLayers) {
       var linkAttr = parseLayers.layersByID[pars.vid];
-      Requests.extend(linkAttr, utils$1.parseStyles(linkAttr.properties));
+      Requests.extend(linkAttr, utils$2.parseStyles(linkAttr.properties));
       linkAttr.stylesPromise.then(function (res) {
         linkAttr.styles = res;
       });
@@ -1289,7 +1645,7 @@ var removeSource = function removeSource(pars) {
       }
 
       if (Object.keys(hosts).length === 0) {
-        utils$1.stop();
+        utils$2.stop();
       }
     }
   } else {
@@ -1313,7 +1669,7 @@ var moveend = function moveend(pars) {
     bbox = pars.bbox;
   }
 
-  utils$1.now();
+  utils$2.now();
   return;
 };
 
@@ -1346,63 +1702,192 @@ console.log('chkTiles _1______________:', tcnt, pars.zKey, opt); //, tile.z, til
 */
 
 
+var getStyleNum = function getStyleNum(arr, styles, indexes, z) {
+  // let out = -1;
+  return 0;
+};
+
+var _parseItem = function _parseItem(_ref2) {
+  var item = _ref2.item,
+      st = _ref2.st,
+      bounds = _ref2.bounds,
+      hiddenLines = _ref2.hiddenLines,
+      pars = _ref2.pars;
+  // let geo = item[item.length - 1],
+  // type = geo.type,
+  // z = pars.z;
+  return {};
+};
+
+var _checkVectorTiles = function _checkVectorTiles(_ref3) {
+  var arrTiles = _ref3.arrTiles,
+      observers = _ref3.observers,
+      styles = _ref3.styles,
+      indexes = _ref3.indexes,
+      sort = _ref3.sort;
+
+  var _loop2 = function _loop2(i, len) {
+    var tile = arrTiles[i],
+        pixels = tile.pixels,
+        styleNums = tile.styleNums,
+        itemsbounds = tile.itemsbounds,
+        hiddenLines = tile.hiddenLines;
+
+    if (!styleNums) {
+      styleNums = tile.styleNums = [];
+    }
+
+    if (!itemsbounds) {
+      itemsbounds = tile.itemsbounds = [];
+    }
+
+    if (!hiddenLines) {
+      hiddenLines = tile.hiddenLines = [];
+    }
+
+    if (!pixels) {
+      pixels = tile.pixels = [];
+    }
+
+    var _loop3 = function _loop3(zKey) {
+      var observer = observers[zKey]; // let flag = observer.bounds.intersects(tile.bounds);
+      // if (!observer.bounds.intersects(tile.bounds)) {
+      // continue;
+      // }
+
+      if (!observer.tcnt) {
+        observer.tcnt = 0;
+      }
+
+      observer.tcnt++;
+      observer.items = [];
+      tile.values.forEach(function (it, n) {
+        // let parsed = 
+        _parseItem({
+          hiddenLines: hiddenLines[n],
+          bounds: itemsbounds[n],
+          st: styleNums[n],
+          pars: observer.pars,
+          item: it
+        });
+
+        var geo = it[it.length - 1],
+            st = styleNums[n],
+            bounds = itemsbounds[n];
+
+        if (st === undefined) {
+          st = getStyleNum(it, styles, indexes, observer.pars.z);
+          tile.styleNums[n] = styleNums[n] = st;
+        }
+
+        if (!bounds) {
+          bounds = Requests.geoItemBounds(geo);
+          tile.itemsbounds[n] = itemsbounds[n] = bounds;
+        }
+
+        var pt = {
+          st: st,
+          itemData: {
+            bounds: bounds,
+            item: it
+          }
+        }; // TODO: если НЕТ сортировки объектов то тут отрисовка иначе после сортировки
+
+        if (sort) {
+          observer.items.push(pt);
+        } else {
+          pt.observer = observer;
+          drawItem(pt);
+        }
+      });
+    };
+
+    for (var zKey in observers) {
+      _loop3(zKey);
+    }
+  };
+
+  for (var i = 0, len = arrTiles.length; i < len; i++) {
+    _loop2(i);
+  }
+
+  console.log('checkObservers _____1__________:', hosts);
+};
+
 var checkObservers = function checkObservers() {
   console.log('checkObservers _______________:', hosts);
   Object.keys(hosts).forEach(function (host) {
     Object.keys(hosts[host].ids).forEach(function (layerID) {
       var tData = hosts[host].ids[layerID],
           layerData = hosts[host].parseLayers.layersByID[layerID],
-          oKeys = Object.keys(tData.observers),
+          styles = layerData.styles || [],
+          // oKeys = Object.keys(tData.observers),
+      observers = tData.observers || {},
+          indexes = tData.tileAttributeIndexes,
           tilesPromise = tData.tilesPromise;
 
       if (tilesPromise) {
-        Promise.all(Object.values(tilesPromise)).then(function (arrTiles) {
-          var _loop2 = function _loop2(i, len) {
-            var tile = arrTiles[i],
-                itemsbounds = tile.itemsbounds;
+        layerData.stylesPromise.then(function (arrStyle) {
+          var _maxStyleSize = layerData.properties._maxStyleSize || 128;
 
-            if (!itemsbounds) {
-              itemsbounds = tile.itemsbounds = [];
+          Object.keys(observers).forEach(function (key) {
+            var observer = observers[key];
+
+            if (!observer.bounds) {
+              var coords = observer.pars.coords,
+                  z = observer.pars.z;
+              _maxStyleSize = utils$2._getMaxStyleSize(z, styles); // var mercSize = 2 * _maxStyleSize * WORLDWIDTHFULL / Math.pow(2, 8 + z); //TODO: check formula
+
+              var gmt = utils$2.getTileNumFromLeaflet(coords);
+              observer.bounds = utils$2.getTileBounds(gmt.x, gmt.y, gmt.z);
             }
+          });
+          Promise.all(Object.values(tilesPromise)).then(function (arrTiles) {
+            _checkVectorTiles({
+              sort: layerData.sorting,
+              arrTiles: arrTiles,
+              observers: observers,
+              styles: styles,
+              indexes: indexes
+            });
 
-            var _loop3 = function _loop3(j, len1) {
-              var zKey = oKeys[j],
-                  observer = tData.observers[zKey];
-
-              if (!observer || !observer.bounds.intersects(tile.bounds)) {
-                return "continue";
-              }
-
-              if (!observer.tcnt) {
-                observer.tcnt = 0;
-              }
-
-              observer.tcnt++;
-              observer.items = [];
-              tile.values.forEach(function (it, n) {
-                var geo = it[it.length - 1],
-                    bounds = itemsbounds[n];
-
-                if (!bounds) {
-                  bounds = itemsbounds[n] = Requests.geoItemBounds(geo);
-                }
-
-                observer.items.push(it);
-              });
-            };
-
-            for (var j = 0, len1 = oKeys.length; j < len1; j++) {
-              var _ret = _loop3(j);
-
-              if (_ret === "continue") continue;
+            for (var zKey in observers) {
+              var observer = observers[zKey],
+                  pars = observer.pars;
+              pars.bitmap = observer.canvas.transferToImageBitmap();
+              observer.resolver(pars); // observer.resolver({
+              // bitmap: observer.canvas.transferToImageBitmap()
+              // });
             }
-          };
+            /*
+            for (let i = 0, len = arrTiles.length; i < len; i++) {
+            	let tile = arrTiles[i],
+            		styleNums = tile.styleNums,
+            		itemsbounds = tile.itemsbounds;
+            	if (!styleNums) {styleNums = tile.styleNums = [];}
+            	if (!itemsbounds) {itemsbounds = tile.itemsbounds = [];}
+            	for (let j = 0, len1 = oKeys.length; j < len1; j++) {
+            		let zKey = oKeys[j],
+            			observer = tData.observers[zKey];
+            			if (!observer || !observer.bounds.intersects(tile.bounds)) {continue;}
+            			if (!observer.tcnt) {observer.tcnt = 0;}
+            		observer.tcnt++;
+            		observer.items = [];
+            		tile.values.forEach((it, n) => {
+            			let geo = it[it.length - 1],
+            				st = styleNums[n],
+            				bounds = itemsbounds[n];
+            			if (st === undefined) {st = styleNums[n] = getStyleNum(it, styles, tData.tileAttributeIndexes, observer.pars.z);}
+            			if (!bounds) {bounds = itemsbounds[n] = Requests.geoItemBounds(geo);}
+            				observer.items.push(it);
+            		});
+            	}
+            }
+            */
 
-          for (var i = 0, len = arrTiles.length; i < len; i++) {
-            _loop2(i);
-          }
 
-          console.log('checkObservers _____1__________:', hosts);
+            console.log('checkObservers _____1__________:', hosts, arrStyle);
+          });
         });
       }
     });
@@ -1417,7 +1902,7 @@ var addObserver = function addObserver(pars) {
         host = hosts[pars.hostName || HOST],
         out = {};
 
-    if (host && host.parseLayers.layersByID[layerID]) {
+    if (host && host.parseLayers && host.parseLayers.layersByID[layerID]) {
       // let stData = host.parseLayers.layersByID[layerID],
       var tData = host.ids[layerID];
 
@@ -1425,8 +1910,14 @@ var addObserver = function addObserver(pars) {
         tData.observers = {};
       }
 
+      var bounds = Requests.bounds();
+
+      if (pars.bbox) {
+        bounds = bounds.extendBounds(pars.bbox);
+      }
+
       tData.observers[zKey] = {
-        bounds: Requests.bounds().extendBounds(pars.bbox),
+        bounds: bounds,
         pars: pars,
         resolver: resolve
       }; // console.log('addObserver ____1_______:', stData, tData);
@@ -1466,7 +1957,7 @@ var setDateInterval = function setDateInterval(pars) {
     host.ids[pars.id].dateEnd = pars.dateEnd;
   }
 
-  utils$1.now();
+  utils$2.now();
   console.log('setDateInterval:', pars, hosts);
 };
 
@@ -1563,7 +2054,209 @@ var getMapTree = function getMapTree(pars) {
   });
 };
 
+var drawTest = function drawTest(pars) {
+  var canvas = new OffscreenCanvas(256, 256),
+      // const canvas = message.canvas,
+  w = canvas.width,
+      h = canvas.height,
+      ctx = canvas.getContext('2d'); // gl = canvas.getContext('webgl');
+  // ctx.fillStyle = 'red';
+  // ctx.lineWidth = 5;
+  // ctx.rect(5, 5, w - 5, h - 5);
+  // ctx.fill();
+
+  Renderer2d.updatePoly({
+    coords: pars.coords,
+    _drawing: true,
+    closed: true,
+    _ctx: ctx,
+    canvas: canvas,
+    w: w,
+    h: h,
+    options: pars.options || {
+      fillRule: 'evenodd',
+      _dashArray: null,
+      lineCap: "butt",
+      lineJoin: "miter",
+      color: "green",
+      fillColor: "blue",
+      interactive: true,
+      smoothFactor: 1,
+      weight: 10,
+      opacity: 1,
+      fillOpacity: 1,
+      stroke: true,
+      fill: false
+    },
+    _parts: pars._parts || [[{
+      "x": 0,
+      "y": 0
+    }, {
+      "x": 255,
+      "y": 255
+    }, {
+      "x": 255,
+      "y": 0
+    }, {
+      "x": 0,
+      "y": 255
+    }]] // _parts: message._parts || [[{"x":54,"y":40},{"x":95,"y":40},{"x":95,"y":88}]]
+
+  }); // delete message. ;
+  // message.out = {done: true};
+  // let bitmap = canvas.transferToImageBitmap();
+
+  return {
+    bitmap: canvas.transferToImageBitmap()
+  };
+};
+
+var drawTile = function drawTile(pars) {
+  pars = pars || {};
+  var hostName = pars.hostName || HOST,
+      layerID = pars.layerID,
+      host = hosts[hostName],
+      parsedLayer = host.parseLayers.layersByID[layerID],
+      ids = host.ids[layerID]; // console.log('drawTile:', pars);
+
+  return new Promise(function (resolve) {
+    parsedLayer.stylesPromise.then(function (st) {
+      Promise.all(Object.values(ids.tilesPromise)).then(function (res) {
+        console.log('drawTile tilesPromise ___:', st, res);
+        resolve(Requests.extend(drawTest(pars), pars));
+      });
+    }); // if (host && host.layerTree) {
+    // resolve(host.layerTree);
+    // } else {
+    // Requests.getJson({
+    // url: '//' + hostName + '/Map/GetMapFolder',
+    // options: {},
+    // params: {
+    // srs: 3857, 
+    // skipTiles: 'All',
+    // mapId: pars.mapID,
+    // folderId: 'root',
+    // visibleItemOnly: false
+    // }
+    // }).then(json => {
+    // if (!hosts[hostName]) { hosts[hostName] = {ids: {}, signals: {}}; }
+    // console.log('getMapTree:', hosts, json);
+    // resolve(json);
+    // hosts[hostName].layerTree = json.res.Result;
+    // hosts[hostName].parseLayers = parseTree(json.res);
+    // })
+    // }
+  });
+};
+
+var _parseGeo = function _parseGeo(pars) {
+  var observer = pars.observer,
+      tn = observer.pars.coords,
+      itemData = pars.itemData,
+      item = itemData.item,
+      geo = item[item.length - 1],
+      geoType = geo.type,
+      out;
+
+  if (geoType === 'POLYGON' || geoType === 'MULTIPOLYGON') {
+    var coords = geo.coordinates;
+
+    if (geoType === 'POLYGON') {
+      coords = [coords];
+    }
+
+    out = utils$2.getCoordsPixels({
+      coords: coords,
+      z: tn.z,
+      tpx: pars.tpx,
+      tpy: pars.tpy
+    });
+  }
+
+  return out;
+};
+
+var drawItem = function drawItem(pars) {
+  var observer = pars.observer,
+      ctx = observer.ctx,
+      itemData = pars.itemData,
+      coords = observer.pars.coords,
+      tpx = 256 * coords.x,
+      tpy = 256 * (1 + coords.y),
+      pt = {
+    _merc: true,
+    // TODO: рисование напрямую из Меркатора
+    _drawing: true,
+    closed: true,
+    _ctx: ctx,
+    tpx: tpx,
+    tpy: tpy,
+    itemData: itemData,
+    options: pars.options || {
+      fillRule: 'evenodd',
+      _dashArray: null,
+      lineCap: "butt",
+      lineJoin: "miter",
+      color: "green",
+      fillColor: "blue",
+      interactive: true,
+      smoothFactor: 1,
+      weight: 10,
+      opacity: 1,
+      fillOpacity: 1,
+      stroke: true,
+      fill: false
+    },
+    _parts: itemData.pixels || [[{
+      "x": 0,
+      "y": 0
+    }, {
+      "x": 255,
+      "y": 255
+    }, {
+      "x": 255,
+      "y": 0
+    }, {
+      "x": 0,
+      "y": 255
+    }]]
+  };
+  /*
+  // TODO: рисование напрямую из Меркатора
+  	tpx - сдвиг px по X
+  	tpy - сдвиг px по Y
+  */
+
+  if (!itemData.pixels) {
+    pars.tpx = tpx;
+    pars.tpy = tpy;
+
+    var tt = _parseGeo(pars);
+
+    itemData.pixels = tt.coords;
+    itemData.hidden = tt.hidden;
+  }
+
+  if (!ctx) {
+    var canvas = new OffscreenCanvas(256, 256);
+    canvas.width = canvas.height = 256;
+    observer.canvas = canvas; // const canvas = message.canvas,
+    // w = canvas.width,
+    // h = canvas.height,
+
+    pt._ctx = observer.ctx = canvas.getContext('2d');
+  }
+
+  Renderer2d.updatePoly(pt); // delete message. ;
+  // message.out = {done: true};
+  // let bitmap = canvas.transferToImageBitmap();
+  // return {
+  // bitmap: canvas.transferToImageBitmap()
+  // };
+};
+
 var DataVersion = {
+  drawTile: drawTile,
   addObserver: addObserver,
   removeObserver: removeObserver,
   getMapTree: getMapTree,
@@ -1576,10 +2269,90 @@ var DataVersion = {
 var _self$1 = self;
 
 (_self$1.on || _self$1.addEventListener).call(_self$1, 'message', function (e) {
-  var message = e.data || e;
-  console.log('message ', e);
+  var message = e.data || e; // console.log('in message ', e);
 
   switch (message.cmd) {
+    case 'getTiles':
+      console.log('getTiles ', message);
+      Promise.all(message.queue.map(function (coords) {
+        return DataVersion.addObserver(Requests.extend({
+          coords: coords,
+          zKey: coords.x + ':' + coords.y + ':' + coords.z
+        }, message));
+      } // .then((json) => {
+      //message.out = json;
+      // console.log('vvvvvvvvvv ___res____ ', message);
+      //_self.postMessage(message);
+      // return json;
+      // })
+      //DataVersion.drawTile(Requests.extend({coords: coords}, message))
+      )).then(function (arr) {
+        console.log('getTiles111 ', arr);
+        message.out = arr;
+
+        _self$1.postMessage(message);
+      });
+      break;
+
+    case 'addCanvasTile':
+      var canvas = new OffscreenCanvas(256, 256),
+          // const canvas = message.canvas,
+      w = canvas.width,
+          h = canvas.height,
+          ctx = canvas.getContext('2d'); // gl = canvas.getContext('webgl');
+      // ctx.fillStyle = 'red';
+      // ctx.lineWidth = 5;
+      // ctx.rect(5, 5, w - 5, h - 5);
+      // ctx.fill();
+
+      Renderer2d.updatePoly({
+        coords: message.coords,
+        _drawing: true,
+        closed: true,
+        _ctx: ctx,
+        canvas: canvas,
+        w: w,
+        h: h,
+        options: message.options || {
+          fillRule: 'evenodd',
+          _dashArray: null,
+          lineCap: "butt",
+          lineJoin: "miter",
+          color: "green",
+          fillColor: "blue",
+          interactive: true,
+          smoothFactor: 1,
+          weight: 10,
+          opacity: 1,
+          fillOpacity: 1,
+          stroke: true,
+          fill: false
+        },
+        _parts: message._parts || [[{
+          "x": 0,
+          "y": 0
+        }, {
+          "x": 255,
+          "y": 255
+        }, {
+          "x": 255,
+          "y": 0
+        }, {
+          "x": 0,
+          "y": 255
+        }]] // _parts: message._parts || [[{"x":54,"y":40},{"x":95,"y":40},{"x":95,"y":88}]]
+
+      }); // delete message. ;
+
+      message.out = {
+        done: true
+      };
+      message.bitmap = canvas.transferToImageBitmap();
+
+      _self$1.postMessage(message, [message.bitmap]);
+
+      break;
+
     case 'getLayerItems':
       Requests.getLayerItems({
         layerID: message.layerID

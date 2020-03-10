@@ -1,5 +1,6 @@
 import Requests from './Requests';
 import TilesLoader from './TilesLoader';
+import Renderer2d from './Renderer2d';
 
 const HOST = 'maps.kosmosnimki.ru',
     WORLDWIDTHFULL = 40075016.685578496,
@@ -88,7 +89,94 @@ let hosts = {},
 
 
 const utils = {
-    now: function() {
+    getCoordsPixels: function(attr) {
+        var coords = attr.coords,
+            z = attr.z,
+			tpx = attr.tpx,
+			tpy = attr.tpy,
+            hiddenLines = attr.hiddenLines || [],
+            pixels = [],
+            hidden = [],
+            hiddenFlag = false,
+            mInPixel = Math.pow(2, z + 8) / WORLDWIDTHFULL;
+			/*
+			,
+            hash = {
+                // gmx: gmx,
+				// topLeft: attr.topLeft,
+                tpx: tpx,
+                tpy: tpy,
+                coords: null,
+                hiddenLines: null
+            };
+			*/
+        for (var j = 0, len = coords.length; j < len; j++) {
+            // var coords1 = coords[j],
+                // hiddenLines1 = hiddenLines[j] || [],
+                // pixels1 = [], hidden1 = [];
+			coords[j].forEach(ringMerc => {
+                var res = utils.getRingPixels({
+					ringMerc: ringMerc,
+					tpx: tpx,
+					tpy: tpy,
+					mInPixel: mInPixel,
+					hiddenLines: hiddenLines
+				});
+				pixels.push(res.pixels);
+				// var tt = res;
+			});
+			/*
+            for (var j1 = 0, len1 = coords1.length; j1 < len1; j1++) {
+                hash.ringMerc = coords1[j1];
+                hash.hiddenLines = hiddenLines1[j1] || [];
+                var res = utils.getRingPixels(hash);
+                pixels1.push(res.coords);
+                hidden1.push(res.hidden);
+                if (res.hidden) {
+                    hiddenFlag = true;
+                }
+            }
+            pixels.push(pixels1);
+            hidden.push(hidden1);
+			*/
+        }
+console.log('aaaaaaaaaa', pixels, tpx, tpy)
+		
+        return {coords: pixels, hidden: hiddenFlag ? hidden : null, z: z};
+    },
+
+    getRingPixels: ({ringMerc, tpx, tpy, mInPixel, hiddenLines}) => {
+console.log('getRingPixels', ringMerc, tpx, tpy)
+        if (ringMerc.length === 0) {
+			return null;
+		}
+        var cnt = 0, cntHide = 0,
+            lastX = null, lastY = null,
+            vectorSize = typeof ringMerc[0] === 'number' ? 2 : 1,
+            pixels = [], hidden = [];
+        for (var i = 0, len = ringMerc.length; i < len; i += vectorSize) {
+            var lineIsOnEdge = false;
+            if (hiddenLines && i === hiddenLines[cntHide]) {
+                lineIsOnEdge = true;
+                cntHide++;
+            }
+            var c = vectorSize === 1 ? ringMerc[i] : [ringMerc[i], ringMerc[i + 1]],
+                x1 = Math.round(c[0] * mInPixel), y1 = Math.round(c[1] * mInPixel),
+                x2 = Math.round(x1 - tpx), y2 = Math.round(tpy - y1);
+
+            if (lastX !== x2 || lastY !== y2) {
+                lastX = x2; lastY = y2;
+                if (lineIsOnEdge) {
+                    hidden.push(cnt);
+                }
+                pixels[cnt++] = x1;
+                pixels[cnt++] = y1;
+            }
+        }
+        return {pixels: pixels, hidden: hidden.length ? hidden : null};
+    },
+    
+	now: function() {
 		if (timeoutID) { clearTimeout(timeoutID); }
 		timeoutID = setTimeout(chkVersion, 0);
     },
@@ -150,7 +238,7 @@ const utils = {
         // var pt = {
             // Name: it.Name || '',
             // type: type || '',
-			legend: false,
+			// legend: false,
             // MinZoom: it.MinZoom || 0,
             // MaxZoom: it.MaxZoom || 18
         // };
@@ -271,36 +359,89 @@ const utils = {
 		};
 */
 	},
+    getTileBounds: function(x, y, z) {  //x, y, z - GeoMixer tile coordinates
+		var tileSize = WORLDWIDTHFULL / Math.pow(2, z),
+            minx = x * tileSize,
+            miny = y * tileSize;
+        return Requests.bounds([[minx, miny], [minx + tileSize, miny + tileSize]]);
+    },
+
+    getTileNumFromLeaflet: function (tilePoint, zoom) {
+        if ('z' in tilePoint) {
+            zoom = tilePoint.z;
+        }
+        var pz = Math.pow(2, zoom),
+            tx = tilePoint.x % pz + (tilePoint.x < 0 ? pz : 0),
+            ty = tilePoint.y % pz + (tilePoint.y < 0 ? pz : 0);
+        return {
+            z: zoom,
+            x: tx % pz - pz / 2,
+            y: pz / 2 - 1 - ty % pz
+        };
+    },
+
+    _getMaxStyleSize: function(zoom, styles) {  // estimete style size for arbitrary object
+        var maxSize = 0;
+        for (var i = 0, len = styles.length; i < len; i++) {
+            var style = styles[i];
+            if (zoom > style.MaxZoom || zoom < style.MinZoom) { continue; }
+            var RenderStyle = style.RenderStyle;
+            if (this._needLoadIcons || !RenderStyle || !('maxSize' in RenderStyle)) {
+                maxSize = 128;
+                break;
+            }
+            var maxShift = 0;
+            if ('iconAnchor' in RenderStyle && !RenderStyle.iconCenter) {
+                maxShift = Math.max(
+                    Math.abs(RenderStyle.iconAnchor[0]),
+                    Math.abs(RenderStyle.iconAnchor[1])
+                );
+            }
+            maxSize = Math.max(RenderStyle.maxSize + maxShift, maxSize);
+        }
+        return maxSize;
+    },
 
     parseStyles: (prop) => {
-        let styles = prop.styles || [],
+        let styles = prop.styles || [];
 			// attr = prop.tileAttributeIndexes,
-            out = styles.map(it => {
+		// prop._maxStyleSize = 128;
+		prop._maxStyleSize = 0;
+		let out = styles.map(it => {
 				return new Promise(resolve => {
 					let data = utils.parseFilter(it.Filter || ''),
-						renderStyle = it.RenderStyle;
-						// iconUrl = renderStyle.iconUrl || (renderStyle.marker && renderStyle.marker.image);
+						renderStyle = it.RenderStyle,
+						iconUrl = renderStyle.iconUrl || (renderStyle.marker && renderStyle.marker.image);
 					data.MinZoom = it.MinZoom || MINZOOM;
 					data.MaxZoom = it.MaxZoom || MAXZOOM;
 					if (renderStyle) {
 						data.renderStyle = utils.decodeOldStyle(renderStyle);
 					}
 
-					// if (iconUrl) {
-						// Requests.getBitMap(iconUrl).then(blob => {
-							// console.log('dsddd', blob);
-							// createImageBitmap(blob, {
-								// premultiplyAlpha: 'none',
-								// colorSpaceConversion: 'none'
-							// }).then(imageBitmap => {
-								// data.imageBitmap = imageBitmap;
-								// resolve(data);
-							// }).catch(console.warn);
+					if (iconUrl) {
+						Requests.getBitMap(iconUrl).then(blob => {
+		// .then(function(blob) {
+			// return createImageBitmap(blob, {
+				// premultiplyAlpha: 'none',
+				// colorSpaceConversion: 'none'
+			// });
+							
+							console.log('dsddd', blob);
+							return createImageBitmap(blob, {
+								premultiplyAlpha: 'none',
+								colorSpaceConversion: 'none'
+							}).then(imageBitmap => {
+								data.imageBitmap = imageBitmap;
+								if (prop._maxStyleSize < imageBitmap.width) { prop._maxStyleSize = imageBitmap.width; }
+								if (prop._maxStyleSize < imageBitmap.height) { prop._maxStyleSize = imageBitmap.height; }
+								resolve(data);
+							}).catch(console.warn);
 							// resolve(data);
-						// });
-					// } else {
+						});
+					} else {
+						if (prop._maxStyleSize < data.renderStyle.weight) { prop._maxStyleSize = data.renderStyle.weight; }
 						resolve(data);
-					// }
+					}
 					// return data;
 				})
 			});
@@ -462,9 +603,12 @@ const chkVersion = () => {
 						pt.tilesOrder = it.tilesOrder;
 						// pt.tilesPromise = 
 						TilesLoader.load(pt);
-						// Promise.all(Object.values(pt.tilesPromise)).then((res) => {
-				// console.log('tilesPromise ___:', hosts, res);
-						// });
+						Promise.all(Object.values(pt.tilesPromise)).then((res) => {
+							//self.postMessage({res: res, host: host, dmID: it.name, cmd: 'TilesData'});
+
+				console.log('tilesPromise ___:', hosts, res);
+							_waitCheckObservers();
+						});
 
 						// pt.tilesPromise.then(res => {
 				// console.log('tilesPromise ___:', hosts, res);
@@ -592,8 +736,81 @@ console.log('chkTiles _1______________:', tcnt, pars.zKey, opt); //, tile.z, til
 };
 */
 const getStyleNum = (arr, styles, indexes, z) => {
-	let out = -1;
+	// let out = -1;
+	return 0;
+};
+
+const _parseItem = ({item, st, bounds, hiddenLines, pars}) => {
+	// let geo = item[item.length - 1],
+		// type = geo.type,
+		// z = pars.z;
 	
+	return {
+	};
+};
+
+const _checkVectorTiles = ({arrTiles, observers, styles, indexes, sort}) => {
+	for (let i = 0, len = arrTiles.length; i < len; i++) {
+		let tile = arrTiles[i],
+			pixels = tile.pixels,
+			styleNums = tile.styleNums,
+			itemsbounds = tile.itemsbounds,
+			hiddenLines = tile.hiddenLines;
+		if (!styleNums) {styleNums = tile.styleNums = [];}
+		if (!itemsbounds) {itemsbounds = tile.itemsbounds = [];}
+		if (!hiddenLines) {hiddenLines = tile.hiddenLines = [];}
+		if (!pixels) {pixels = tile.pixels = [];}
+		for (let zKey in observers) {
+			let observer = observers[zKey];
+			// let flag = observer.bounds.intersects(tile.bounds);
+
+			// if (!observer.bounds.intersects(tile.bounds)) {
+				// continue;
+			// }
+
+			if (!observer.tcnt) {observer.tcnt = 0;}
+			observer.tcnt++;
+			observer.items = [];
+			tile.values.forEach((it, n) => {
+				// let parsed = 
+				_parseItem({
+					hiddenLines: hiddenLines[n],
+					bounds: itemsbounds[n],
+					st: styleNums[n],
+					pars: observer.pars,
+					item: it
+				});
+				
+				let geo = it[it.length - 1],
+					st = styleNums[n],
+					bounds = itemsbounds[n];
+				if (st === undefined) {
+					st = getStyleNum(it, styles, indexes, observer.pars.z);
+					tile.styleNums[n] = styleNums[n] = st;
+				}
+				if (!bounds) {
+					bounds = Requests.geoItemBounds(geo);
+					tile.itemsbounds[n] = itemsbounds[n] =  bounds;
+				}
+
+				let pt = {
+					st: st,
+					itemData: {
+						bounds: bounds,
+						item: it
+					}
+				};
+				// TODO: если НЕТ сортировки объектов то тут отрисовка иначе после сортировки
+				if (sort) {
+					observer.items.push(pt);
+				} else {
+					pt.observer = observer;
+					drawItem(pt);
+				}
+			});
+		}
+	}
+console.log('checkObservers _____1__________:', hosts);
 };
 
 const checkObservers = () => {
@@ -603,37 +820,74 @@ const checkObservers = () => {
 			let	tData = hosts[host].ids[layerID],
 				layerData = hosts[host].parseLayers.layersByID[layerID],
 				styles = layerData.styles || [],
-				oKeys = Object.keys(tData.observers),
+				// oKeys = Object.keys(tData.observers),
+				observers = tData.observers || {},
+				indexes = tData.tileAttributeIndexes,
 				tilesPromise = tData.tilesPromise;
 			if (tilesPromise) {
-				Promise.all(Object.values(tilesPromise)).then((arrTiles) => {
-					for (let i = 0, len = arrTiles.length; i < len; i++) {
-						let tile = arrTiles[i],
-							styleNums = tile.styleNums,
-							itemsbounds = tile.itemsbounds;
-						if (!styleNums) {styleNums = tile.styleNums = [];}
-						if (!itemsbounds) {itemsbounds = tile.itemsbounds = [];}
-						for (let j = 0, len1 = oKeys.length; j < len1; j++) {
-							let zKey = oKeys[j],
-								observer = tData.observers[zKey];
+				layerData.stylesPromise.then((arrStyle) => {
+					let _maxStyleSize = layerData.properties._maxStyleSize || 128;
+					Object.keys(observers).forEach(key => {
+						let observer = observers[key];
+						if (!observer.bounds) {
+							let coords = observer.pars.coords,
+								z = observer.pars.z;
+							_maxStyleSize = utils._getMaxStyleSize(z, styles);
 
-							if (!observer || !observer.bounds.intersects(tile.bounds)) {continue;}
+							// var mercSize = 2 * _maxStyleSize * WORLDWIDTHFULL / Math.pow(2, 8 + z); //TODO: check formula
 
-							if (!observer.tcnt) {observer.tcnt = 0;}
-							observer.tcnt++;
-							observer.items = [];
-							tile.values.forEach((it, n) => {
-								let geo = it[it.length - 1],
-									st = styleNums[n],
-									bounds = itemsbounds[n];
-								if (st === undefined) {st = styleNums[n] = getStyleNum(it, styles, tData.tileAttributeIndexes, observer.pars.z);}
-								if (!bounds) {bounds = itemsbounds[n] = Requests.geoItemBounds(geo);}
-
-								observer.items.push(it);
-							});
+							var gmt = utils.getTileNumFromLeaflet(coords);
+							observer.bounds = utils.getTileBounds(gmt.x, gmt.y, gmt.z);
 						}
-					}
-		console.log('checkObservers _____1__________:', hosts);
+						
+					});
+					Promise.all(Object.values(tilesPromise)).then((arrTiles) => {
+						_checkVectorTiles({
+							sort: layerData.sorting,
+							arrTiles: arrTiles,
+							observers: observers,
+							styles: styles,
+							indexes: indexes
+						});
+						for (let zKey in observers) {
+							let observer = observers[zKey],
+								pars = observer.pars;
+							pars.bitmap = observer.canvas.transferToImageBitmap();
+							observer.resolver(pars);
+							// observer.resolver({
+								// bitmap: observer.canvas.transferToImageBitmap()
+							// });
+						}
+						/*
+						for (let i = 0, len = arrTiles.length; i < len; i++) {
+							let tile = arrTiles[i],
+								styleNums = tile.styleNums,
+								itemsbounds = tile.itemsbounds;
+							if (!styleNums) {styleNums = tile.styleNums = [];}
+							if (!itemsbounds) {itemsbounds = tile.itemsbounds = [];}
+							for (let j = 0, len1 = oKeys.length; j < len1; j++) {
+								let zKey = oKeys[j],
+									observer = tData.observers[zKey];
+
+								if (!observer || !observer.bounds.intersects(tile.bounds)) {continue;}
+
+								if (!observer.tcnt) {observer.tcnt = 0;}
+								observer.tcnt++;
+								observer.items = [];
+								tile.values.forEach((it, n) => {
+									let geo = it[it.length - 1],
+										st = styleNums[n],
+										bounds = itemsbounds[n];
+									if (st === undefined) {st = styleNums[n] = getStyleNum(it, styles, tData.tileAttributeIndexes, observer.pars.z);}
+									if (!bounds) {bounds = itemsbounds[n] = Requests.geoItemBounds(geo);}
+
+									observer.items.push(it);
+								});
+							}
+						}
+						*/
+			console.log('checkObservers _____1__________:', hosts, arrStyle);
+					});
 				});
 			}
 		});
@@ -648,12 +902,14 @@ console.log('addObserver_______________:', pars, hosts);
 			zKey = pars.zKey,
 			host = hosts[pars.hostName || HOST],
 			out = {};
-		if (host && host.parseLayers.layersByID[layerID]) {
+		if (host && host.parseLayers && host.parseLayers.layersByID[layerID]) {
 			// let stData = host.parseLayers.layersByID[layerID],
 			let	tData = host.ids[layerID];
 			if (!tData.observers) { tData.observers = {}; }
+			let bounds = Requests.bounds();
+			if (pars.bbox) { bounds = bounds.extendBounds(pars.bbox); }
 			tData.observers[zKey] = {
-				bounds: Requests.bounds().extendBounds(pars.bbox),
+				bounds: bounds,
 				pars: pars,
 				resolver: resolve
 			};
@@ -770,7 +1026,186 @@ const getMapTree = (pars) => {
 	});
 };
 
+const drawTest = (pars) => {
+	const canvas = new OffscreenCanvas(256, 256),
+	// const canvas = message.canvas,
+		w = canvas.width,
+		h = canvas.height,
+		ctx = canvas.getContext('2d');
+		// gl = canvas.getContext('webgl');
+	// ctx.fillStyle = 'red';
+	// ctx.lineWidth = 5;
+	// ctx.rect(5, 5, w - 5, h - 5);
+	// ctx.fill();
+	
+	Renderer2d.updatePoly({
+		coords: pars.coords,
+		_drawing: true,
+		closed: true,
+		_ctx: ctx,
+		canvas: canvas,
+		w: w,
+		h: h,
+		options: pars.options || {
+			fillRule: 'evenodd',
+			_dashArray: null,
+			lineCap: "butt",
+			lineJoin: "miter",
+			color: "green",
+			fillColor: "blue",
+			interactive: true,
+			smoothFactor: 1,
+			weight: 10,
+			opacity: 1,
+			fillOpacity: 1,
+			stroke: true,
+			fill: false
+		},
+		_parts: pars._parts || [[{"x":0,"y":0},{"x":255,"y":255},{"x":255,"y":0},{"x":0,"y":255}]]
+		// _parts: message._parts || [[{"x":54,"y":40},{"x":95,"y":40},{"x":95,"y":88}]]
+	});
+	// delete message. ;
+	// message.out = {done: true};
+	// let bitmap = canvas.transferToImageBitmap();
+	return {
+		bitmap: canvas.transferToImageBitmap()
+	};
+};
+
+const drawTile = (pars) => {
+	pars = pars || {};
+	let hostName = pars.hostName || HOST,
+		layerID = pars.layerID,
+		host = hosts[hostName],
+		parsedLayer = host.parseLayers.layersByID[layerID],
+		ids = host.ids[layerID];
+ // console.log('drawTile:', pars);
+
+	return new Promise((resolve) => {
+		parsedLayer.stylesPromise.then(st => {
+			Promise.all(Object.values(ids.tilesPromise)).then((res) => {
+
+	console.log('drawTile tilesPromise ___:', st, res);
+				resolve(Requests.extend(
+					drawTest(pars), pars
+				));
+			});
+		});
+		// if (host && host.layerTree) {
+			// resolve(host.layerTree);
+		// } else {
+			// Requests.getJson({
+				// url: '//' + hostName + '/Map/GetMapFolder',
+				// options: {},
+				// params: {
+					// srs: 3857, 
+					// skipTiles: 'All',
+					// mapId: pars.mapID,
+					// folderId: 'root',
+					// visibleItemOnly: false
+				// }
+			// }).then(json => {
+				// if (!hosts[hostName]) { hosts[hostName] = {ids: {}, signals: {}}; }
+ // console.log('getMapTree:', hosts, json);
+				// resolve(json);
+				// hosts[hostName].layerTree = json.res.Result;
+				// hosts[hostName].parseLayers = parseTree(json.res);
+			// })
+		// }
+	});
+};
+
+const _parseGeo = (pars) => {
+	let observer = pars.observer,
+		tn = observer.pars.coords,
+		itemData = pars.itemData,
+		item = itemData.item,
+		
+		geo = item[item.length - 1],
+		geoType = geo.type,
+		out;
+	
+    if (geoType === 'POLYGON' || geoType === 'MULTIPOLYGON') {
+		let coords = geo.coordinates;
+		if (geoType === 'POLYGON') { coords = [coords]; }
+		out = utils.getCoordsPixels({
+			coords: coords,
+			z: tn.z,
+			tpx: pars.tpx,
+			tpy: pars.tpy
+		});
+	}
+	return out;
+};
+
+const drawItem = (pars) => {
+	let observer = pars.observer,
+		ctx = observer.ctx,
+		itemData = pars.itemData,
+		coords = observer.pars.coords,
+		tpx = 256 * coords.x,
+		tpy = 256 * (1 + coords.y),
+
+		pt = {
+			_merc: true,		// TODO: рисование напрямую из Меркатора
+			_drawing: true,
+			closed: true,
+			_ctx: ctx,
+			tpx: tpx,
+			tpy: tpy,
+			itemData: itemData,
+			options: pars.options || {
+				fillRule: 'evenodd',
+				_dashArray: null,
+				lineCap: "butt",
+				lineJoin: "miter",
+				color: "green",
+				fillColor: "blue",
+				interactive: true,
+				smoothFactor: 1,
+				weight: 10,
+				opacity: 1,
+				fillOpacity: 1,
+				stroke: true,
+				fill: false
+			},
+			_parts: itemData.pixels || [[{"x":0,"y":0},{"x":255,"y":255},{"x":255,"y":0},{"x":0,"y":255}]]
+		};
+	/*
+	// TODO: рисование напрямую из Меркатора
+		tpx - сдвиг px по X
+		tpy - сдвиг px по Y
+	*/
+	if (!itemData.pixels) {
+		pars.tpx = tpx;
+		pars.tpy = tpy;
+		let tt = _parseGeo(pars);
+		itemData.pixels = tt.coords;
+		itemData.hidden = tt.hidden;
+	}
+	if (!ctx) {
+		const canvas = new OffscreenCanvas(256, 256);
+		canvas.width = canvas.height = 256;
+		observer.canvas = canvas;
+		
+	// const canvas = message.canvas,
+		// w = canvas.width,
+		// h = canvas.height,
+		pt._ctx = observer.ctx = canvas.getContext('2d');
+		
+	}
+
+	Renderer2d.updatePoly(pt);
+	// delete message. ;
+	// message.out = {done: true};
+	// let bitmap = canvas.transferToImageBitmap();
+	// return {
+		// bitmap: canvas.transferToImageBitmap()
+	// };
+}
+
 export default {
+	drawTile,
 	addObserver,
 	removeObserver,
 	getMapTree,
