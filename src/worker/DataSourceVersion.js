@@ -161,16 +161,16 @@ console.log('getRingPixels', ringMerc, tpx, tpy)
                 cntHide++;
             }
             var c = vectorSize === 1 ? ringMerc[i] : [ringMerc[i], ringMerc[i + 1]],
-                x1 = Math.round(c[0] * mInPixel), y1 = Math.round(c[1] * mInPixel),
-                x2 = Math.round(x1 - tpx), y2 = Math.round(tpy - y1);
+                x1 = Math.round((c[0] + W) * mInPixel), y1 = Math.round((W - c[1]) * mInPixel),
+                x2 = Math.round(x1 - tpx), y2 = Math.round(y1 - tpy);
 
             if (lastX !== x2 || lastY !== y2) {
                 lastX = x2; lastY = y2;
                 if (lineIsOnEdge) {
                     hidden.push(cnt);
                 }
-                pixels[cnt++] = x1;
-                pixels[cnt++] = y1;
+                pixels[cnt++] = x2;
+                pixels[cnt++] = y2;
             }
         }
         return {pixels: pixels, hidden: hidden.length ? hidden : null};
@@ -359,26 +359,26 @@ console.log('getRingPixels', ringMerc, tpx, tpy)
 		};
 */
 	},
-    getTileBounds: function(x, y, z) {  //x, y, z - GeoMixer tile coordinates
-		var tileSize = WORLDWIDTHFULL / Math.pow(2, z),
-            minx = x * tileSize,
-            miny = y * tileSize;
+    getTileBounds: function(coords) {
+		var tileSize = WORLDWIDTHFULL / Math.pow(2, coords.z),
+            minx = coords.x * tileSize - W,
+            miny = W - coords.y * tileSize;
         return Requests.bounds([[minx, miny], [minx + tileSize, miny + tileSize]]);
     },
 
-    getTileNumFromLeaflet: function (tilePoint, zoom) {
-        if ('z' in tilePoint) {
-            zoom = tilePoint.z;
-        }
-        var pz = Math.pow(2, zoom),
-            tx = tilePoint.x % pz + (tilePoint.x < 0 ? pz : 0),
-            ty = tilePoint.y % pz + (tilePoint.y < 0 ? pz : 0);
-        return {
-            z: zoom,
-            x: tx % pz - pz / 2,
-            y: pz / 2 - 1 - ty % pz
-        };
-    },
+    // getTileNumFromLeaflet: function (tilePoint, zoom) {
+        // if ('z' in tilePoint) {
+            // zoom = tilePoint.z;
+        // }
+        // var pz = Math.pow(2, zoom),
+            // tx = tilePoint.x % pz + (tilePoint.x < 0 ? pz : 0),
+            // ty = tilePoint.y % pz + (tilePoint.y < 0 ? pz : 0);
+        // return {
+            // z: zoom,
+            // x: tx % pz - pz / 2,
+            // y: pz / 2 - 1 - ty % pz
+        // };
+    // },
 
     _getMaxStyleSize: function(zoom, styles) {  // estimete style size for arbitrary object
         var maxSize = 0;
@@ -836,8 +836,7 @@ const checkObservers = () => {
 
 							// var mercSize = 2 * _maxStyleSize * WORLDWIDTHFULL / Math.pow(2, 8 + z); //TODO: check formula
 
-							var gmt = utils.getTileNumFromLeaflet(coords);
-							observer.bounds = utils.getTileBounds(gmt.x, gmt.y, gmt.z);
+							observer.bounds = utils.getTileBounds(coords);
 						}
 						
 					});
@@ -906,10 +905,10 @@ console.log('addObserver_______________:', pars, hosts);
 			// let stData = host.parseLayers.layersByID[layerID],
 			let	tData = host.ids[layerID];
 			if (!tData.observers) { tData.observers = {}; }
-			let bounds = Requests.bounds();
+			// let bounds = Requests.bounds();
 			if (pars.bbox) { bounds = bounds.extendBounds(pars.bbox); }
 			tData.observers[zKey] = {
-				bounds: bounds,
+				// bounds: bounds,
 				pars: pars,
 				resolver: resolve
 			};
@@ -1005,23 +1004,54 @@ const getMapTree = (pars) => {
 		if (host && host.layerTree) {
 			resolve(host.layerTree);
 		} else {
-			Requests.getJson({
-				url: '//' + hostName + '/Map/GetMapFolder',
-				// options: {},
-				params: {
-					srs: 3857, 
-					skipTiles: 'All',
-					mapId: pars.mapID,
-					folderId: 'root',
-					visibleItemOnly: false
+			let apiKeyPromise = !host || !host.apiKeyPromise ? Requests.getJson({
+					url: '//' + hostName + '/ApiKey.ashx',
+					paramsArr: [{
+						Key: pars.apiKey
+					}]
+				}) : host.apiKeyPromise;
+
+			// if (!host || !host.apiKeyPromise) {
+				// host.apiKeyPromise = Requests.getJson({
+					// url: '//' + hostName + '/ApiKey.ashx',
+					// paramsArr: [{
+						// Key: pars.apiKey
+					// }]
+				// });
+				
+			// }
+			apiKeyPromise.then(json => {
+				// console.log('/ApiKey.ashx', json);
+				let res = json.res;
+				if (res.Status === 'ok' && res.Result) {
+					return res.Result.Key;
 				}
-			}).then(json => {
-				if (!hosts[hostName]) { hosts[hostName] = {ids: {}, signals: {}}; }
- console.log('getMapTree:', hosts, json);
-				resolve(json);
-				hosts[hostName].layerTree = json.res.Result;
-				hosts[hostName].parseLayers = parseTree(json.res);
+				return null;
 			})
+			.then(apiKey => {
+				Requests.getJson({
+					url: '//' + hostName + '/Map/GetMapFolder',
+					// options: {},
+					params: {
+						apiKey: apiKey,
+						srs: 3857, 
+						skipTiles: 'All',
+						mapId: pars.mapID,
+						folderId: 'root',
+						visibleItemOnly: false
+					}
+				}).then(json => {
+					if (!hosts[hostName]) { hosts[hostName] = {ids: {}, signals: {}}; }
+	 console.log('getMapTree:', hosts, json);
+					resolve(json);
+					hosts[hostName].layerTree = json.res.Result;
+					hosts[hostName].parseLayers = parseTree(json.res);
+					if (apiKey) {
+						hosts[hostName].apiKeyPromise = apiKeyPromise;
+						hosts[hostName].apiKey = apiKey;
+					}
+				})
+			});
 		}
 	});
 };
@@ -1142,12 +1172,21 @@ const drawItem = (pars) => {
 	let observer = pars.observer,
 		ctx = observer.ctx,
 		itemData = pars.itemData,
+		item = itemData.item,
+		last = item.length - 1,
+		geo = item[last],
+		type = geo.type,
 		coords = observer.pars.coords,
-		tpx = 256 * coords.x,
-		tpy = 256 * (1 + coords.y),
+		tz = Math.pow(2, coords.z),
+		// tpx = 256 * coords.x,
+		// tpy = 256 * coords.y,
+		tpx = 256 * Math.abs(coords.x % tz),
+		tpy = 256 * Math.abs(coords.y % tz),
+		// tpy = 256 * (1 + coords.y),
 
 		pt = {
 			_merc: true,		// TODO: рисование напрямую из Меркатора
+			mInPixel: Math.pow(2, coords.z + 8) / WORLDWIDTHFULL,
 			_drawing: true,
 			closed: true,
 			_ctx: ctx,
@@ -1176,6 +1215,9 @@ const drawItem = (pars) => {
 		tpx - сдвиг px по X
 		tpy - сдвиг px по Y
 	*/
+// if (coords.x === -1 && coords.y === 0 && coords.z === 1) {
+	console.log('ddd', coords, pt);
+// }
 	if (!itemData.pixels) {
 		pars.tpx = tpx;
 		pars.tpy = tpy;
@@ -1195,6 +1237,7 @@ const drawItem = (pars) => {
 		
 	}
 
+pt._ctx.fillText(coords.x + ':' + coords.y + ':' + coords.z, 128, 128);
 	Renderer2d.updatePoly(pt);
 	// delete message. ;
 	// message.out = {done: true};
@@ -1204,7 +1247,33 @@ const drawItem = (pars) => {
 	// };
 }
 
+const getTiles = (message) => {
+	let hostName = message.hostName,
+		layerID = message.layerID,
+		queue = message.queue,
+		z = message.z,
+		hostLayers = hosts[hostName];
+
+	if (hostLayers && hostLayers.ids && hostLayers.ids[layerID]) {
+		let observers = hostLayers.ids[layerID].observers;
+		for (let key in observers) {
+			if (observers[key].pars.z !== z) {
+				observers[key].resolver(null);
+				delete observers[key];
+			}
+		}
+	}
+// console.log('vvvvvvvvvv ___res____ ', message);
+	return Promise.all(queue.map(coords => 
+		addObserver(Requests.extend({
+			coords: coords,
+			zKey: coords.x + ':' + coords.y + ':' + coords.z
+		}, message))
+	));
+};
+
 export default {
+	getTiles,
 	drawTile,
 	addObserver,
 	removeObserver,

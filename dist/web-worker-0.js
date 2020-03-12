@@ -842,9 +842,8 @@ var utils$1 = {
     var i,
         j,
         len2,
-        p,
         // coords = ph.coords,
-    parts = ph._parts,
+    parts = ph.itemData.pixels || ph._parts,
         len = parts.length,
         ctx = ph._ctx;
 
@@ -855,10 +854,62 @@ var utils$1 = {
     ctx.beginPath();
 
     for (i = 0; i < len; i++) {
-      for (j = 0, len2 = parts[i].length; j < len2; j++) {
-        p = parts[i][j];
-        ctx[j ? 'lineTo' : 'moveTo'](p.x, p.y);
+      for (j = 0, len2 = parts[i].length; j < len2; j += 2) {
+        //p = parts[i][j];
+        ctx[j ? 'lineTo' : 'moveTo'](parts[i][j], parts[i][j + 1]);
+      } // for (j = 0, len2 = parts[i].length; j < len2; j++) {
+      // p = parts[i][j];
+      // ctx[j ? 'lineTo' : 'moveTo'](p.x, p.y);
+      // }
+
+
+      if (ph.closed) {
+        ctx.closePath();
       }
+    } // ctx.strokeText(coords.z + '.' + coords.x + '.' + coords.y, 150, 150);
+
+
+    utils$1._fillStroke(ph); // TODO optimization: 1 fill/stroke for all features with equal style instead of 1 for each feature
+
+  },
+  _updatePolyMerc: function _updatePolyMerc(ph) {
+    // _updatePoly: function (layer, closed) {
+    ph = _reqParse(ph);
+
+    if (!ph._drawing) {
+      return;
+    }
+
+    var i,
+        j,
+        len2,
+        p,
+        // coords = ph.coords,
+    parts = ph.itemData.pixels || ph._parts,
+        mInPixel = ph.mInPixel,
+        item = ph.itemData.item,
+        coordinates = item[item.length - 1].coordinates,
+        len = coordinates.length,
+        ctx = ph._ctx;
+
+    if (!len) {
+      return;
+    } // ctx.translate(ph.tpx * mInPixel, ph.tpy * mInPixel);
+
+
+    ctx.translate(ph.tpx, ph.tpy);
+    ctx.scale(mInPixel, mInPixel);
+    ctx.beginPath();
+
+    for (i = 0; i < len; i++) {
+      for (j = 0, len2 = coordinates[i].length; j < len2; j++) {
+        p = coordinates[i][j];
+        ctx[j ? 'lineTo' : 'moveTo'](p[0], p[1]);
+      } // for (j = 0, len2 = parts[i].length; j < len2; j++) {
+      // p = parts[i][j];
+      // ctx[j ? 'lineTo' : 'moveTo'](p.x, p.y);
+      // }
+
 
       if (ph.closed) {
         ctx.closePath();
@@ -924,6 +975,7 @@ var utils$1 = {
 };
 var Renderer2d = {
   draw: utils$1._draw,
+  updatePolyMerc: utils$1._updatePolyMerc,
   updatePoly: utils$1._updatePoly,
   updateCircle: utils$1._updateCircle,
   fillStroke: utils$1._fillStroke,
@@ -1052,10 +1104,10 @@ var utils$2 = {
       }
 
       var c = vectorSize === 1 ? ringMerc[i] : [ringMerc[i], ringMerc[i + 1]],
-          x1 = Math.round(c[0] * mInPixel),
-          y1 = Math.round(c[1] * mInPixel),
+          x1 = Math.round((c[0] + W) * mInPixel),
+          y1 = Math.round((W - c[1]) * mInPixel),
           x2 = Math.round(x1 - tpx),
-          y2 = Math.round(tpy - y1);
+          y2 = Math.round(y1 - tpy);
 
       if (lastX !== x2 || lastY !== y2) {
         lastX = x2;
@@ -1065,8 +1117,8 @@ var utils$2 = {
           hidden.push(cnt);
         }
 
-        pixels[cnt++] = x1;
-        pixels[cnt++] = y1;
+        pixels[cnt++] = x2;
+        pixels[cnt++] = y2;
       }
     }
 
@@ -1253,27 +1305,25 @@ var utils$2 = {
     		};
     */
   },
-  getTileBounds: function getTileBounds(x, y, z) {
-    //x, y, z - GeoMixer tile coordinates
-    var tileSize = WORLDWIDTHFULL / Math.pow(2, z),
-        minx = x * tileSize,
-        miny = y * tileSize;
+  getTileBounds: function getTileBounds(coords) {
+    var tileSize = WORLDWIDTHFULL / Math.pow(2, coords.z),
+        minx = coords.x * tileSize - W,
+        miny = W - coords.y * tileSize;
     return Requests.bounds([[minx, miny], [minx + tileSize, miny + tileSize]]);
   },
-  getTileNumFromLeaflet: function getTileNumFromLeaflet(tilePoint, zoom) {
-    if ('z' in tilePoint) {
-      zoom = tilePoint.z;
-    }
-
-    var pz = Math.pow(2, zoom),
-        tx = tilePoint.x % pz + (tilePoint.x < 0 ? pz : 0),
-        ty = tilePoint.y % pz + (tilePoint.y < 0 ? pz : 0);
-    return {
-      z: zoom,
-      x: tx % pz - pz / 2,
-      y: pz / 2 - 1 - ty % pz
-    };
-  },
+  // getTileNumFromLeaflet: function (tilePoint, zoom) {
+  // if ('z' in tilePoint) {
+  // zoom = tilePoint.z;
+  // }
+  // var pz = Math.pow(2, zoom),
+  // tx = tilePoint.x % pz + (tilePoint.x < 0 ? pz : 0),
+  // ty = tilePoint.y % pz + (tilePoint.y < 0 ? pz : 0);
+  // return {
+  // z: zoom,
+  // x: tx % pz - pz / 2,
+  // y: pz / 2 - 1 - ty % pz
+  // };
+  // },
   _getMaxStyleSize: function _getMaxStyleSize(zoom, styles) {
     // estimete style size for arbitrary object
     var maxSize = 0;
@@ -1838,8 +1888,7 @@ var checkObservers = function checkObservers() {
                   z = observer.pars.z;
               _maxStyleSize = utils$2._getMaxStyleSize(z, styles); // var mercSize = 2 * _maxStyleSize * WORLDWIDTHFULL / Math.pow(2, 8 + z); //TODO: check formula
 
-              var gmt = utils$2.getTileNumFromLeaflet(coords);
-              observer.bounds = utils$2.getTileBounds(gmt.x, gmt.y, gmt.z);
+              observer.bounds = utils$2.getTileBounds(coords);
             }
           });
           Promise.all(Object.values(tilesPromise)).then(function (arrTiles) {
@@ -1908,16 +1957,15 @@ var addObserver = function addObserver(pars) {
 
       if (!tData.observers) {
         tData.observers = {};
-      }
+      } // let bounds = Requests.bounds();
 
-      var bounds = Requests.bounds();
 
       if (pars.bbox) {
         bounds = bounds.extendBounds(pars.bbox);
       }
 
       tData.observers[zKey] = {
-        bounds: bounds,
+        // bounds: bounds,
         pars: pars,
         resolver: resolve
       }; // console.log('addObserver ____1_______:', stData, tData);
@@ -2027,28 +2075,59 @@ var getMapTree = function getMapTree(pars) {
     if (host && host.layerTree) {
       resolve(host.layerTree);
     } else {
-      Requests.getJson({
-        url: '//' + hostName + '/Map/GetMapFolder',
-        // options: {},
-        params: {
-          srs: 3857,
-          skipTiles: 'All',
-          mapId: pars.mapID,
-          folderId: 'root',
-          visibleItemOnly: false
-        }
-      }).then(function (json) {
-        if (!hosts[hostName]) {
-          hosts[hostName] = {
-            ids: {},
-            signals: {}
-          };
+      var apiKeyPromise = !host || !host.apiKeyPromise ? Requests.getJson({
+        url: '//' + hostName + '/ApiKey.ashx',
+        paramsArr: [{
+          Key: pars.apiKey
+        }]
+      }) : host.apiKeyPromise; // if (!host || !host.apiKeyPromise) {
+      // host.apiKeyPromise = Requests.getJson({
+      // url: '//' + hostName + '/ApiKey.ashx',
+      // paramsArr: [{
+      // Key: pars.apiKey
+      // }]
+      // });
+      // }
+
+      apiKeyPromise.then(function (json) {
+        // console.log('/ApiKey.ashx', json);
+        var res = json.res;
+
+        if (res.Status === 'ok' && res.Result) {
+          return res.Result.Key;
         }
 
-        console.log('getMapTree:', hosts, json);
-        resolve(json);
-        hosts[hostName].layerTree = json.res.Result;
-        hosts[hostName].parseLayers = parseTree(json.res);
+        return null;
+      }).then(function (apiKey) {
+        Requests.getJson({
+          url: '//' + hostName + '/Map/GetMapFolder',
+          // options: {},
+          params: {
+            apiKey: apiKey,
+            srs: 3857,
+            skipTiles: 'All',
+            mapId: pars.mapID,
+            folderId: 'root',
+            visibleItemOnly: false
+          }
+        }).then(function (json) {
+          if (!hosts[hostName]) {
+            hosts[hostName] = {
+              ids: {},
+              signals: {}
+            };
+          }
+
+          console.log('getMapTree:', hosts, json);
+          resolve(json);
+          hosts[hostName].layerTree = json.res.Result;
+          hosts[hostName].parseLayers = parseTree(json.res);
+
+          if (apiKey) {
+            hosts[hostName].apiKeyPromise = apiKeyPromise;
+            hosts[hostName].apiKey = apiKey;
+          }
+        });
       });
     }
   });
@@ -2180,12 +2259,21 @@ var drawItem = function drawItem(pars) {
   var observer = pars.observer,
       ctx = observer.ctx,
       itemData = pars.itemData,
+      item = itemData.item,
+      last = item.length - 1,
+      geo = item[last],
+      type = geo.type,
       coords = observer.pars.coords,
-      tpx = 256 * coords.x,
-      tpy = 256 * (1 + coords.y),
-      pt = {
+      tz = Math.pow(2, coords.z),
+      // tpx = 256 * coords.x,
+  // tpy = 256 * coords.y,
+  tpx = 256 * Math.abs(coords.x % tz),
+      tpy = 256 * Math.abs(coords.y % tz),
+      // tpy = 256 * (1 + coords.y),
+  pt = {
     _merc: true,
     // TODO: рисование напрямую из Меркатора
+    mInPixel: Math.pow(2, coords.z + 8) / WORLDWIDTHFULL,
     _drawing: true,
     closed: true,
     _ctx: ctx,
@@ -2226,6 +2314,9 @@ var drawItem = function drawItem(pars) {
   	tpx - сдвиг px по X
   	tpy - сдвиг px по Y
   */
+  // if (coords.x === -1 && coords.y === 0 && coords.z === 1) {
+
+  console.log('ddd', coords, pt); // }
 
   if (!itemData.pixels) {
     pars.tpx = tpx;
@@ -2247,6 +2338,8 @@ var drawItem = function drawItem(pars) {
     pt._ctx = observer.ctx = canvas.getContext('2d');
   }
 
+  pt._ctx.fillText(coords.x + ':' + coords.y + ':' + coords.z, 128, 128);
+
   Renderer2d.updatePoly(pt); // delete message. ;
   // message.out = {done: true};
   // let bitmap = canvas.transferToImageBitmap();
@@ -2255,7 +2348,35 @@ var drawItem = function drawItem(pars) {
   // };
 };
 
+var getTiles = function getTiles(message) {
+  var hostName = message.hostName,
+      layerID = message.layerID,
+      queue = message.queue,
+      z = message.z,
+      hostLayers = hosts[hostName];
+
+  if (hostLayers && hostLayers.ids && hostLayers.ids[layerID]) {
+    var observers = hostLayers.ids[layerID].observers;
+
+    for (var key in observers) {
+      if (observers[key].pars.z !== z) {
+        observers[key].resolver(null);
+        delete observers[key];
+      }
+    }
+  } // console.log('vvvvvvvvvv ___res____ ', message);
+
+
+  return Promise.all(queue.map(function (coords) {
+    return addObserver(Requests.extend({
+      coords: coords,
+      zKey: coords.x + ':' + coords.y + ':' + coords.z
+    }, message));
+  }));
+};
+
 var DataVersion = {
+  getTiles: getTiles,
   drawTile: drawTile,
   addObserver: addObserver,
   removeObserver: removeObserver,
@@ -2274,19 +2395,24 @@ var _self$1 = self;
   switch (message.cmd) {
     case 'getTiles':
       console.log('getTiles ', message);
-      Promise.all(message.queue.map(function (coords) {
-        return DataVersion.addObserver(Requests.extend({
-          coords: coords,
-          zKey: coords.x + ':' + coords.y + ':' + coords.z
-        }, message));
-      } // .then((json) => {
-      //message.out = json;
-      // console.log('vvvvvvvvvv ___res____ ', message);
-      //_self.postMessage(message);
-      // return json;
-      // })
-      //DataVersion.drawTile(Requests.extend({coords: coords}, message))
-      )).then(function (arr) {
+      /*
+      			Promise.all(message.queue.map(coords => 
+      				DataVersion.addObserver(Requests.extend({
+      					coords: coords,
+      					zKey: coords.x + ':' + coords.y + ':' + coords.z
+      				}, message))
+      				// .then((json) => {
+      					//message.out = json;
+      			// console.log('vvvvvvvvvv ___res____ ', message);
+      					//_self.postMessage(message);
+      					// return json;
+      				// })
+      				//DataVersion.drawTile(Requests.extend({coords: coords}, message))
+      				
+      			))
+      			*/
+
+      DataVersion.getTiles(message).then(function (arr) {
         console.log('getTiles111 ', arr);
         message.out = arr;
 
@@ -2371,6 +2497,7 @@ var _self$1 = self;
     case 'getMap':
       DataVersion.getMapTree({
         mapID: message.mapID,
+        apiKey: message.apiKey,
         hostName: message.hostName,
         search: message.search
       }).then(function (json) {

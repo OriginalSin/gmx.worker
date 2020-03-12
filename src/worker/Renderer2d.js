@@ -74,7 +74,7 @@ const utils = {
 
 		let i, j, len2, p,
 			// coords = ph.coords,
-			parts = ph._parts,
+			parts = ph.itemData.pixels || ph._parts,
 			len = parts.length,
 			ctx = ph._ctx;
 
@@ -83,10 +83,14 @@ const utils = {
 		ctx.beginPath();
 
 		for (i = 0; i < len; i++) {
-			for (j = 0, len2 = parts[i].length; j < len2; j++) {
-				p = parts[i][j];
-				ctx[j ? 'lineTo' : 'moveTo'](p.x, p.y);
+			for (j = 0, len2 = parts[i].length; j < len2; j+=2) {
+				//p = parts[i][j];
+				ctx[j ? 'lineTo' : 'moveTo'](parts[i][j], parts[i][j + 1]);
 			}
+			// for (j = 0, len2 = parts[i].length; j < len2; j++) {
+				// p = parts[i][j];
+				// ctx[j ? 'lineTo' : 'moveTo'](p.x, p.y);
+			// }
 			if (ph.closed) {
 				ctx.closePath();
 			}
@@ -98,6 +102,49 @@ const utils = {
 
 		// TODO optimization: 1 fill/stroke for all features with equal style instead of 1 for each feature
 	},
+
+	_updatePolyMerc: function (ph) {
+	// _updatePoly: function (layer, closed) {
+		ph = _reqParse(ph);
+		if (!ph._drawing) { return; }
+
+		let i, j, len2, p,
+			// coords = ph.coords,
+			parts = ph.itemData.pixels || ph._parts,
+			mInPixel = ph.mInPixel,
+			item = ph.itemData.item,
+			coordinates = item[item.length - 1].coordinates,
+			len = coordinates.length,
+			ctx = ph._ctx;
+
+		if (!len) { return; }
+
+		// ctx.translate(ph.tpx * mInPixel, ph.tpy * mInPixel);
+		ctx.translate(ph.tpx, ph.tpy);
+		ctx.scale(mInPixel, mInPixel);
+		ctx.beginPath();
+
+		for (i = 0; i < len; i++) {
+			for (j = 0, len2 = coordinates[i].length; j < len2; j++) {
+				p = coordinates[i][j];
+				ctx[j ? 'lineTo' : 'moveTo'](p[0], p[1]);
+			}
+			// for (j = 0, len2 = parts[i].length; j < len2; j++) {
+				// p = parts[i][j];
+				// ctx[j ? 'lineTo' : 'moveTo'](p.x, p.y);
+			// }
+			if (ph.closed) {
+				ctx.closePath();
+			}
+		}
+// ctx.strokeText(coords.z + '.' + coords.x + '.' + coords.y, 150, 150);
+
+
+		utils._fillStroke(ph);
+
+		// TODO optimization: 1 fill/stroke for all features with equal style instead of 1 for each feature
+	},
+
 
 	_updateCircle: function (ph) {
 	// _updateCircle: function (layer) {
@@ -153,6 +200,7 @@ const utils = {
 
 export default {
 	draw: utils._draw,
+	updatePolyMerc: utils._updatePolyMerc,
 	updatePoly: utils._updatePoly,
 	updateCircle: utils._updateCircle,
 	fillStroke: utils._fillStroke,

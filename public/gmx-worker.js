@@ -923,6 +923,7 @@ var gmxWorker = (function (exports, L) {
           dataWorker.postMessage({
             code: code,
             cmd: 'getMap',
+            apiKey: opt.apiKey,
             mapID: mapID
           });
         });

@@ -211,6 +211,7 @@ const Utils = {
 			dataWorker.postMessage({
 				code: code,
 				cmd: 'getMap',
+				apiKey: opt.apiKey,
 				mapID: mapID
 			});
 		});

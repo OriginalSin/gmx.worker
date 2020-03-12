@@ -9,7 +9,7 @@ var _self = self;
     switch (message.cmd) {
 		case 'getTiles':
 console.log('getTiles ', message);
-
+/*
 			Promise.all(message.queue.map(coords => 
 				DataVersion.addObserver(Requests.extend({
 					coords: coords,
@@ -23,7 +23,10 @@ console.log('getTiles ', message);
 				// })
 				//DataVersion.drawTile(Requests.extend({coords: coords}, message))
 				
-			)).then(arr => {
+			))
+			*/
+			DataVersion.getTiles(message)
+			.then(arr => {
 console.log('getTiles111 ', arr);
 				message.out = arr;
 				_self.postMessage(message);
@@ -81,7 +84,7 @@ console.log('getTiles111 ', arr);
 			});
 			break;
 		case 'getMap':
-			DataVersion.getMapTree({mapID: message.mapID, hostName: message.hostName, search: message.search}).then((json) => {
+			DataVersion.getMapTree({mapID: message.mapID, apiKey: message.apiKey, hostName: message.hostName, search: message.search}).then((json) => {
 			// Requests.getMapTree({mapID: message.mapID, hostName: message.hostName, search: message.search}).then((json) => {
 				message.out = json;
 				_self.postMessage(message);
